@@ -32,7 +32,7 @@ jobs:
       - name: Compute next version
         id: version
         run: |
-          VERSION=$(.github/scripts/next-version.sh)
+          VERSION=$(bash .github/scripts/next-version.sh)
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Tag release
