@@ -19,8 +19,10 @@ import net.minecraftforge.registries.DeferredRegister;
 import net.minecraftforge.registries.ForgeRegistries;
 import net.minecraftforge.registries.IForgeRegistry;
 import net.minecraftforge.registries.RegistryBuilder;
+import org.apache.logging.log4j.Level;
 import org.pixelfire.nationwars.compute.WorkerPool;
 import org.pixelfire.nationwars.config.NationWarsConfig;
+import org.pixelfire.nationwars.io.NationWarsLogging;
 import org.pixelfire.nationwars.io.NationWarsSavedData;
 import org.pixelfire.nationwars.io.WriterThread;
 import org.pixelfire.nationwars.state.NationRegistry;
@@ -28,6 +30,8 @@ import org.pixelfire.nationwars.state.PeaceClause;
 import org.pixelfire.nationwars.world.OpacIntegration;
 import org.slf4j.Logger;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.function.Supplier;
 
 // The value here should match an entry in the META-INF/mods.toml file
@@ -88,9 +92,41 @@ public class NationWarsMod
         LOGGER.info("nationwars common setup complete; Open Parties and Claims found on the classpath");
     }
 
+    private void registerDiagnosticLogging()
+    {
+        // ModConfig.Type.SERVER is per-world and is only loaded once a server actually starts, so
+        // this can't run any earlier than ServerStartingEvent — FMLCommonSetupEvent fires before any
+        // world exists and every NationWarsConfig getter below would throw.
+        final Level defaultLevel = parseLevel(NationWarsConfig.LOGGING_DEFAULT.get(), Level.INFO);
+        final Level consoleLevel = parseLevel(NationWarsConfig.LOG_TO_SERVER_CONSOLE.get(), Level.WARN);
+
+        final Map<String, Level> categoryLevels = new LinkedHashMap<>();
+        NationWarsConfig.loggingCategories.forEach((category, levelName) -> categoryLevels.put(category, parseLevel(levelName, defaultLevel)));
+
+        NationWarsLogging.register(
+                NationWarsConfig.LOG_FILE_SIZE_MB.get(),
+                NationWarsConfig.LOG_FILE_HISTORY.get(),
+                consoleLevel,
+                categoryLevels,
+                defaultLevel);
+    }
+
+    private static Level parseLevel(final String name, final Level fallback)
+    {
+        final Level level = Level.toLevel(name, null);
+        if (level == null)
+        {
+            LOGGER.warn("nationwars config has an invalid log level '{}'; using {} instead", name, fallback);
+            return fallback;
+        }
+        return level;
+    }
+
     @SubscribeEvent
     public void onServerStarting(final ServerStartingEvent event)
     {
+        registerDiagnosticLogging();
+
         final int lockStripes = NationWarsConfig.LOCK_STRIPES.get();
         final int workerThreads = WorkerPool.resolveThreadCount(NationWarsConfig.WORKER_THREADS.get());
         final int workerQueueCapacity = NationWarsConfig.WORKER_QUEUE_CAPACITY.get();
