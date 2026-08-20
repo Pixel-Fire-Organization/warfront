@@ -29,24 +29,21 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Configure git identity for release commit/tag
+      - name: Compute next version
+        id: version
+        run: |
+          VERSION=$(.github/scripts/next-version.sh)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Tag release
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Create and push release tag
-        run: ./gradlew release -Prelease.disableChecks
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Read released version
-        id: version
-        run: |
-          VERSION=$(./gradlew properties -q | grep "^version:" | awk '{print $2}')
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          git tag "v${{ steps.version.outputs.version }}"
+          git push origin "v${{ steps.version.outputs.version }}"
 
       - name: Build mod jar
-        run: ./gradlew build
+        run: ./gradlew build -PoverrideVersion=${{ steps.version.outputs.version }}
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2

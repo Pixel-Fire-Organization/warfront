@@ -6,17 +6,17 @@ plugins {
     id 'pl.allegro.tech.build.axion-release' version '1.21.3'
 }
 
-// Version is derived from git tags via axion-release-plugin.
-// - `main` pushes create real `vX.Y.Z` tags (see .github/workflows/release-main.yml), so the tagged
-//   commit builds with a clean `X.Y.Z` version.
-// - `dev` pushes never tag; CI passes `-PoverrideVersion=X.Y.Z-dev.N` instead (see release-dev.yml).
-// - Local/untagged builds fall back to axion's own `X.Y.Z-SNAPSHOT` scheme.
+// Version resolution:
+// - CI always passes -PoverrideVersion, computed by .github/scripts/next-version.sh from
+//   Conventional Commits prefixes (feat: -> minor, anything else -> patch) since the last
+//   release tag. `main` tags that computed version as the release; `dev` appends `-dev.N`
+//   without tagging (see release-main.yml / release-dev.yml).
+// - Local/untagged builds fall back to axion-release-plugin's nearest-tag `X.Y.Z-SNAPSHOT`.
 scmVersion {
     tag {
         prefix = 'v'
         versionSeparator = ''
     }
-    versionIncrementer 'incrementPatch'
 }
 
 version = project.hasProperty('overrideVersion') ? project.property('overrideVersion') : scmVersion.version

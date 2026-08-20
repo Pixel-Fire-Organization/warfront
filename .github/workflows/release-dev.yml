@@ -32,10 +32,13 @@ jobs:
       - name: Compute dev version
         id: version
         run: |
-          BASE_VERSION=$(./gradlew properties -q | grep "^version:" | awk '{print $2}')
-          BASE_VERSION=${BASE_VERSION%-SNAPSHOT}
-          DEV_VERSION="${BASE_VERSION}-dev.${{ github.run_number }}"
-          echo "version=$DEV_VERSION" >> "$GITHUB_OUTPUT"
+          NEXT_VERSION=$(.github/scripts/next-version.sh)
+          # N starts at 1 and only continues an existing count when NEXT_VERSION
+          # (the prospective release this would become) hasn't changed since the
+          # last dev pre-release — i.e. no tags exist yet for this X.Y.Z.
+          EXISTING=$(git tag -l "v${NEXT_VERSION}-dev.*" | wc -l | tr -d ' ')
+          N=$((EXISTING + 1))
+          echo "version=${NEXT_VERSION}-dev.${N}" >> "$GITHUB_OUTPUT"
 
       - name: Build mod jar
         run: ./gradlew build -PoverrideVersion=${{ steps.version.outputs.version }}
