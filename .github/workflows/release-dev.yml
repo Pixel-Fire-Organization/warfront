@@ -3,6 +3,17 @@ name: Release (dev)
 on:
   push:
     branches: [dev]
+    paths:
+      - 'src/**'
+      - 'build.gradle'
+      - 'settings.gradle'
+      - 'gradle.properties'
+      - 'gradle/**'
+      - 'gradlew'
+      - 'gradlew.bat'
+      - '.github/workflows/release-main.yml'
+      - '.github/workflows/release-dev.yml'
+      - '.github/scripts/next-version.sh'
 
 permissions:
   contents: write
