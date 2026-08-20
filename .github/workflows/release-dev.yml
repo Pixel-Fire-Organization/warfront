@@ -1,0 +1,50 @@
+name: Release (dev)
+
+on:
+  push:
+    branches: [dev]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-dev
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Compute dev version
+        id: version
+        run: |
+          BASE_VERSION=$(./gradlew properties -q | grep "^version:" | awk '{print $2}')
+          BASE_VERSION=${BASE_VERSION%-SNAPSHOT}
+          DEV_VERSION="${BASE_VERSION}-dev.${{ github.run_number }}"
+          echo "version=$DEV_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build mod jar
+        run: ./gradlew build -PoverrideVersion=${{ steps.version.outputs.version }}
+
+      - name: Publish GitHub pre-release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
+          prerelease: true
+          generate_release_notes: true
+          files: build/libs/*.jar
