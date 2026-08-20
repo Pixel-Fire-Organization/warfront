@@ -43,11 +43,20 @@ jobs:
       - name: Build mod jar
         run: ./gradlew build -PoverrideVersion=${{ steps.version.outputs.version }}
 
-      - name: Publish GitHub pre-release
+      # Created as a draft first: this repo has immutable releases enabled, so GitHub only
+      # accepts asset uploads before a release is published. Publishing (below) then fires
+      # release.published with the jar already attached.
+      - name: Create draft GitHub pre-release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
           name: v${{ steps.version.outputs.version }}
+          draft: true
           prerelease: true
           generate_release_notes: true
           files: build/libs/*.jar
+
+      - name: Publish pre-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "v${{ steps.version.outputs.version }}" --draft=false --repo "${{ github.repository }}"
