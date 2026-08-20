@@ -8,7 +8,7 @@ plugins {
 }
 
 checkstyle {
-    toolVersion = '14.0.0'
+    toolVersion = '10.18.2'
     configFile = file('config/checkstyle/checkstyle.xml')
     maxWarnings = 0
 }
