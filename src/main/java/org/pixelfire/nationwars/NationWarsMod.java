@@ -21,6 +21,8 @@ import net.minecraftforge.registries.IForgeRegistry;
 import net.minecraftforge.registries.RegistryBuilder;
 import org.pixelfire.nationwars.compute.WorkerPool;
 import org.pixelfire.nationwars.config.NationWarsConfig;
+import org.pixelfire.nationwars.io.NationWarsSavedData;
+import org.pixelfire.nationwars.io.WriterThread;
 import org.pixelfire.nationwars.state.NationRegistry;
 import org.pixelfire.nationwars.state.PeaceClause;
 import org.pixelfire.nationwars.world.OpacIntegration;
@@ -51,10 +53,16 @@ public class NationWarsMod
             DeferredRegister.create(ResourceLocation.tryBuild(MODID, "peace_clause"), MODID);
     public static final Supplier<IForgeRegistry<PeaceClause>> PEACE_CLAUSE_REGISTRY = PEACE_CLAUSES.makeRegistry(RegistryBuilder::new);
 
-    // Threading foundation: a fresh registry and worker pool per server lifecycle, created before any
-    // feature that needs them and torn down cleanly when the server stops.
+    // No config key exists yet for the I/O writer's queue depth (Appendix A only sizes the compute
+    // worker pool's queue); this default carries it until audit logging (a later stage) needs to
+    // make it tunable.
+    private static final int WRITER_QUEUE_CAPACITY = 256;
+
+    // Threading foundation: a fresh registry, worker pool, and writer thread per server lifecycle,
+    // created before any feature that needs them and torn down cleanly when the server stops.
     private NationRegistry nationRegistry;
     private WorkerPool workerPool;
+    private WriterThread writerThread;
 
     public NationWarsMod(FMLJavaModLoadingContext context)
     {
@@ -89,14 +97,26 @@ public class NationWarsMod
 
         nationRegistry = new NationRegistry(lockStripes);
         workerPool = new WorkerPool(workerThreads, workerQueueCapacity);
+        writerThread = new WriterThread(WRITER_QUEUE_CAPACITY);
 
-        LOGGER.info("nationwars starting; lockStripes={}, workerThreads={}, workerQueueCapacity={}",
-                lockStripes, workerThreads, workerQueueCapacity);
+        // Attaches (or creates) this mod's save data on the Overworld, proving the persistence
+        // skeleton round-trips through a real world folder before any real state lives in it.
+        final NationWarsSavedData savedData = NationWarsSavedData.get(event.getServer());
+
+        LOGGER.info("nationwars starting; lockStripes={}, workerThreads={}, workerQueueCapacity={}, "
+                        + "savedDataSchemaVersion={}",
+                lockStripes, workerThreads, workerQueueCapacity, NationWarsSavedData.CURRENT_SCHEMA_VERSION);
+        LOGGER.debug("nationwars save data attached: dummyPayload='{}'", savedData.dummyPayload());
     }
 
     @SubscribeEvent
     public void onServerStopping(final ServerStoppingEvent event)
     {
+        if (writerThread != null)
+        {
+            writerThread.close();
+            writerThread = null;
+        }
         if (workerPool != null)
         {
             workerPool.close();
