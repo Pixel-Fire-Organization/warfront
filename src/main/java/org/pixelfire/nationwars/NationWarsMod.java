@@ -8,6 +8,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.server.ServerStartingEvent;
+import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
@@ -18,7 +19,9 @@ import net.minecraftforge.registries.DeferredRegister;
 import net.minecraftforge.registries.ForgeRegistries;
 import net.minecraftforge.registries.IForgeRegistry;
 import net.minecraftforge.registries.RegistryBuilder;
+import org.pixelfire.nationwars.compute.WorkerPool;
 import org.pixelfire.nationwars.config.NationWarsConfig;
+import org.pixelfire.nationwars.state.NationRegistry;
 import org.pixelfire.nationwars.state.PeaceClause;
 import org.pixelfire.nationwars.world.OpacIntegration;
 import org.slf4j.Logger;
@@ -48,6 +51,11 @@ public class NationWarsMod
             DeferredRegister.create(ResourceLocation.tryBuild(MODID, "peace_clause"), MODID);
     public static final Supplier<IForgeRegistry<PeaceClause>> PEACE_CLAUSE_REGISTRY = PEACE_CLAUSES.makeRegistry(RegistryBuilder::new);
 
+    // Threading foundation: a fresh registry and worker pool per server lifecycle, created before any
+    // feature that needs them and torn down cleanly when the server stops.
+    private NationRegistry nationRegistry;
+    private WorkerPool workerPool;
+
     public NationWarsMod(FMLJavaModLoadingContext context)
     {
         IEventBus modEventBus = context.getModEventBus();
@@ -75,6 +83,25 @@ public class NationWarsMod
     @SubscribeEvent
     public void onServerStarting(final ServerStartingEvent event)
     {
-        LOGGER.info("nationwars starting");
+        final int lockStripes = NationWarsConfig.LOCK_STRIPES.get();
+        final int workerThreads = WorkerPool.resolveThreadCount(NationWarsConfig.WORKER_THREADS.get());
+        final int workerQueueCapacity = NationWarsConfig.WORKER_QUEUE_CAPACITY.get();
+
+        nationRegistry = new NationRegistry(lockStripes);
+        workerPool = new WorkerPool(workerThreads, workerQueueCapacity);
+
+        LOGGER.info("nationwars starting; lockStripes={}, workerThreads={}, workerQueueCapacity={}",
+                lockStripes, workerThreads, workerQueueCapacity);
+    }
+
+    @SubscribeEvent
+    public void onServerStopping(final ServerStoppingEvent event)
+    {
+        if (workerPool != null)
+        {
+            workerPool.close();
+            workerPool = null;
+        }
+        nationRegistry = null;
     }
 }
