@@ -2,8 +2,15 @@ plugins {
     id 'eclipse'
     id 'idea'
     id 'maven-publish'
+    id 'checkstyle'
     id 'net.minecraftforge.gradle' version '[6.0,6.2)'
     id 'pl.allegro.tech.build.axion-release' version '1.21.3'
+}
+
+checkstyle {
+    toolVersion = '10.18.2'
+    configFile = file('config/checkstyle/checkstyle.xml')
+    maxWarnings = 0
 }
 
 // Version resolution:
