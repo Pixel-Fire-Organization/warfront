@@ -1,0 +1,53 @@
+name: Release (dev)
+
+on:
+  push:
+    branches: [dev]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-dev
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Compute dev version
+        id: version
+        run: |
+          NEXT_VERSION=$(.github/scripts/next-version.sh)
+          # N starts at 1 and only continues an existing count when NEXT_VERSION
+          # (the prospective release this would become) hasn't changed since the
+          # last dev pre-release — i.e. no tags exist yet for this X.Y.Z.
+          EXISTING=$(git tag -l "v${NEXT_VERSION}-dev.*" | wc -l | tr -d ' ')
+          N=$((EXISTING + 1))
+          echo "version=${NEXT_VERSION}-dev.${N}" >> "$GITHUB_OUTPUT"
+
+      - name: Build mod jar
+        run: ./gradlew build -PoverrideVersion=${{ steps.version.outputs.version }}
+
+      - name: Publish GitHub pre-release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
+          prerelease: true
+          generate_release_notes: true
+          files: build/libs/*.jar
