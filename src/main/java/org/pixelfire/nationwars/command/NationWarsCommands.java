@@ -32,11 +32,12 @@ public final class NationWarsCommands
     {
         event.getDispatcher().register(Commands.literal("nationwars")
                 .then(Commands.literal("staff")
+                        .requires(NationWarsCommands::hasStaffConfigPermission)
                         .then(Commands.literal("loglevel")
-                                .requires(NationWarsCommands::hasStaffConfigPermission)
                                 .then(Commands.argument("category", StringArgumentType.word())
                                         .then(Commands.argument("level", StringArgumentType.word())
-                                                .executes(NationWarsCommands::setLogLevel))))));
+                                                .executes(NationWarsCommands::setLogLevel))))
+                        .then(Commands.literal("reload").executes(NationWarsCommands::reload))));
     }
 
     private static boolean hasStaffConfigPermission(final CommandSourceStack source)
@@ -71,6 +72,13 @@ public final class NationWarsCommands
         }
 
         context.getSource().sendSuccess(() -> Component.literal("nationwars log category '" + category + "' set to " + level), true);
+        return 1;
+    }
+
+    private static int reload(final CommandContext<CommandSourceStack> context)
+    {
+        NationWarsConfig.revalidateAndRederive();
+        context.getSource().sendSuccess(() -> Component.literal("nationwars config re-validated and re-derived."), true);
         return 1;
     }
 }

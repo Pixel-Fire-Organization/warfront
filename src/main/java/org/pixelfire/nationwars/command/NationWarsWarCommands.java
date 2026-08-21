@@ -1,5 +1,6 @@
 package org.pixelfire.nationwars.command;
 
+import com.mojang.brigadier.arguments.LongArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
@@ -13,6 +14,7 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.server.permission.PermissionAPI;
 import org.pixelfire.nationwars.NationWarsMod;
 import org.pixelfire.nationwars.config.NationWarsConfig;
+import org.pixelfire.nationwars.state.Coalition;
 import org.pixelfire.nationwars.state.CounterOffensiveFailureReason;
 import org.pixelfire.nationwars.state.NationRegistry;
 import org.pixelfire.nationwars.state.War;
@@ -27,7 +29,9 @@ import org.pixelfire.nationwars.war.WarTermination;
 import org.pixelfire.nationwars.world.OpacNations;
 import org.pixelfire.nationwars.world.OpacNations.NationSnapshot;
 
+import java.util.HashSet;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -71,18 +75,33 @@ public final class NationWarsWarCommands
         event.getDispatcher().register(Commands.literal("nationwars")
                 .then(Commands.literal("staff")
                         .then(Commands.literal("war")
+                                .requires(NationWarsWarCommands::hasStaffWarPermission)
                                 .then(Commands.literal("cancel")
-                                        .requires(NationWarsWarCommands::hasStaffConfigPermission)
                                         .then(Commands.argument("warId", UuidArgument.uuid())
-                                                .executes(NationWarsWarCommands::staffCancel))))));
+                                                .executes(NationWarsWarCommands::staffCancel)))
+                                .then(Commands.literal("extend")
+                                        .then(Commands.argument("warId", UuidArgument.uuid())
+                                                .then(Commands.argument("hours", LongArgumentType.longArg(1))
+                                                        .executes(NationWarsWarCommands::staffExtend))))
+                                .then(Commands.literal("coalition")
+                                        .then(Commands.literal("add")
+                                                .then(Commands.argument("warId", UuidArgument.uuid())
+                                                        .then(Commands.argument("nation", StringArgumentType.string())
+                                                                .then(Commands.argument("side", StringArgumentType.word())
+                                                                        .executes(ctx -> staffCoalitionChange(ctx, true))))))
+                                        .then(Commands.literal("remove")
+                                                .then(Commands.argument("warId", UuidArgument.uuid())
+                                                        .then(Commands.argument("nation", StringArgumentType.string())
+                                                                .then(Commands.argument("side", StringArgumentType.word())
+                                                                        .executes(ctx -> staffCoalitionChange(ctx, false))))))))));
     }
 
-    private static boolean hasStaffConfigPermission(final CommandSourceStack source)
+    private static boolean hasStaffWarPermission(final CommandSourceStack source)
     {
         final ServerPlayer player = source.getPlayer();
         if (player != null)
         {
-            return PermissionAPI.getPermission(player, NationWarsPermissions.STAFF_CONFIG);
+            return PermissionAPI.getPermission(player, NationWarsPermissions.STAFF_WAR);
         }
         return source.hasPermission(NationWarsConfig.STAFF_PERMISSION_LEVEL.get());
     }
@@ -221,6 +240,92 @@ public final class NationWarsWarCommands
         }
         WarTermination.conclude(registry, war, WarOutcome.STAFF_CANCEL, System.currentTimeMillis());
         context.getSource().sendSuccess(() -> Component.literal("War " + warId + " cancelled by staff."), true);
+        return 1;
+    }
+
+    private static int staffExtend(final CommandContext<CommandSourceStack> context)
+    {
+        final UUID warId = UuidArgument.getUuid(context, "warId");
+        final NationRegistry registry = NationWarsMod.get().getNationRegistry();
+        final War war = registry.wars().get(warId);
+        if (war == null)
+        {
+            context.getSource().sendFailure(Component.literal("No such war."));
+            return 0;
+        }
+        final long hours = LongArgumentType.getLong(context, "hours");
+        final long maxWarExpiresAt = war.declaredAt() + NationWarsConfig.WAR_DURATION_MAX_SECONDS.get() * 1000L;
+        final long newExpiresAt = Math.min(war.warExpiresAt() + hours * 3_600_000L, maxWarExpiresAt);
+
+        registry.stripedLocks().withLocks(() -> registry.wars().put(warId, new War(war.warId(), war.attackers(), war.defenders(),
+                war.phase(), war.declaredAt(), war.activeAt(), newExpiresAt, war.targetCityIds(), war.occupiedCityIds(),
+                war.warScore(), war.suspendedSince(), war.contestedTimeMs(), war.settlementDeadline(), war.outcome(),
+                war.memberTargetableAt())), warId);
+
+        context.getSource().sendSuccess(() -> Component.literal("War " + warId + " extended to " + newExpiresAt
+                + " (clamped to warDurationMax)."), true);
+        return 1;
+    }
+
+    private static int staffCoalitionChange(final CommandContext<CommandSourceStack> context, final boolean adding)
+    {
+        final UUID warId = UuidArgument.getUuid(context, "warId");
+        final NationRegistry registry = NationWarsMod.get().getNationRegistry();
+        final War war = registry.wars().get(warId);
+        if (war == null)
+        {
+            context.getSource().sendFailure(Component.literal("No such war."));
+            return 0;
+        }
+        final String nationName = StringArgumentType.getString(context, "nation");
+        final UUID nationId = OpacNations.findNationByName(context.getSource().getServer(), nationName);
+        if (nationId == null)
+        {
+            context.getSource().sendFailure(Component.literal("No such nation."));
+            return 0;
+        }
+        final String side = StringArgumentType.getString(context, "side");
+        final boolean isAttackerSide;
+        if (side.equalsIgnoreCase("attackers"))
+        {
+            isAttackerSide = true;
+        }
+        else if (side.equalsIgnoreCase("defenders"))
+        {
+            isAttackerSide = false;
+        }
+        else
+        {
+            context.getSource().sendFailure(Component.literal("side must be 'attackers' or 'defenders'."));
+            return 0;
+        }
+
+        final Coalition target = isAttackerSide ? war.attackers() : war.defenders();
+        if (!adding && nationId.equals(target.primaryNationId()))
+        {
+            context.getSource().sendFailure(Component.literal("Cannot remove the primary nation from a coalition; cancel or finalize the war instead."));
+            return 0;
+        }
+
+        final Set<UUID> members = new HashSet<>(target.members());
+        if (adding)
+        {
+            members.add(nationId);
+        }
+        else
+        {
+            members.remove(nationId);
+        }
+        final Coalition updated = new Coalition(Set.copyOf(members), target.pendingMembers(), target.primaryNationId());
+
+        registry.stripedLocks().withLocks(() -> registry.wars().put(warId, new War(war.warId(),
+                isAttackerSide ? updated : war.attackers(), isAttackerSide ? war.defenders() : updated,
+                war.phase(), war.declaredAt(), war.activeAt(), war.warExpiresAt(), war.targetCityIds(), war.occupiedCityIds(),
+                war.warScore(), war.suspendedSince(), war.contestedTimeMs(), war.settlementDeadline(), war.outcome(),
+                war.memberTargetableAt())), warId, nationId);
+
+        context.getSource().sendSuccess(() -> Component.literal((adding ? "Added " : "Removed ") + nationName + " "
+                + (adding ? "to" : "from") + " the " + side + " coalition of war " + warId + "."), true);
         return 1;
     }
 

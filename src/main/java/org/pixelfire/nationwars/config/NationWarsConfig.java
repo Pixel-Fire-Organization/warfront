@@ -460,7 +460,18 @@ public final class NationWarsConfig
         {
             return;
         }
+        revalidateAndRederive();
+    }
 
+    /**
+     * Re-parses and re-validates every list-shaped setting against the spec's current values and
+     * re-derives the plain fields above from them. Forge already re-fires {@link #onLoad} on its own
+     * whenever the backing TOML file changes on disk; {@code /nationwars staff reload} calls this
+     * directly so staff have an explicit way to re-check validity (or confirm an edit already took)
+     * without depending on that file-watch trigger.
+     */
+    public static void revalidateAndRederive()
+    {
         final List<TierDefinition> parsedTiers = TierListParser.parse(TIERS.get());
         TierValidation.validateLadder(parsedTiers);
         TierValidation.validateSpacingFeasibility(parsedTiers, MIN_CHECKPOINT_SPACING.get());

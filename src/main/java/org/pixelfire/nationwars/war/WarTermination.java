@@ -8,6 +8,7 @@ import org.pixelfire.nationwars.io.audit.ActorRole;
 import org.pixelfire.nationwars.io.audit.AuditEntry;
 import org.pixelfire.nationwars.io.audit.AuditSource;
 import org.pixelfire.nationwars.state.City;
+import org.pixelfire.nationwars.state.EvasionKey;
 import org.pixelfire.nationwars.state.NationRegistry;
 import org.pixelfire.nationwars.state.NationState;
 import org.pixelfire.nationwars.state.War;
@@ -84,6 +85,11 @@ public final class WarTermination
             }
         }, allMembers.toArray(UUID[]::new));
 
+        for (final UUID nationId : allMembers)
+        {
+            registry.evasionTrackers().remove(new EvasionKey(war.warId(), nationId));
+        }
+
         final CompoundTag after = new CompoundTag();
         after.putString("outcome", outcome.name());
         NationWarsMod.get().getAuditWriter().append(AuditEntry.of(null, "SYSTEM", war.attackers().primaryNationId(),
@@ -107,7 +113,12 @@ public final class WarTermination
         }
     }
 
-    private static void releaseNation(final NationRegistry registry, final UUID nationId, final UUID warId,
+    /**
+     * Clears one nation's {@code activeWarIds}/{@code lockedByWarId} entry for this war and sets its
+     * cooldown against the opposing primary. Package-visible so {@link EvasionSurrenderService} can
+     * reuse it for a single nation exiting its coalition without the rest of the war concluding.
+     */
+    static void releaseNation(final NationRegistry registry, final UUID nationId, final UUID warId,
             final UUID opponentPrimaryId, final long cooldownExpiresAt)
     {
         final NationState current = registry.nationStates().getOrDefault(nationId, NationState.empty(nationId));

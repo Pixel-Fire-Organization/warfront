@@ -54,6 +54,9 @@ import org.pixelfire.nationwars.world.block.NationWarsMenus;
 import org.pixelfire.nationwars.settlement.NationWarsPeaceClauses;
 import org.pixelfire.nationwars.settlement.NegotiationDraftTracker;
 import org.pixelfire.nationwars.settlement.SettlementBackstopListener;
+import org.pixelfire.nationwars.settlement.SettlementReverter;
+import org.pixelfire.nationwars.world.CheckpointReverters;
+import org.pixelfire.nationwars.war.EvasionTickListener;
 import org.pixelfire.nationwars.war.WarLifecycleListener;
 import org.pixelfire.nationwars.war.WarProtectionListener;
 import org.slf4j.Logger;
@@ -107,6 +110,7 @@ public class NationWarsMod
     private WarLifecycleListener warLifecycleListener;
     private WarProtectionListener warProtectionListener;
     private CaptureTickListener captureTickListener;
+    private EvasionTickListener evasionTickListener;
     private SettlementBackstopListener settlementBackstopListener;
     private NegotiationDraftTracker negotiationDraftTracker;
     private volatile boolean serverStopping;
@@ -127,6 +131,8 @@ public class NationWarsMod
         NationWarsBlockEntities.bootstrap();
         NationWarsMenus.bootstrap();
         NationWarsPeaceClauses.bootstrap();
+        CheckpointReverters.bootstrap();
+        SettlementReverter.bootstrap();
 
         BLOCKS.register(modEventBus);
         ITEMS.register(modEventBus);
@@ -224,6 +230,8 @@ public class NationWarsMod
         MinecraftForge.EVENT_BUS.register(warLifecycleListener);
         warProtectionListener = new WarProtectionListener();
         MinecraftForge.EVENT_BUS.register(warProtectionListener);
+        evasionTickListener = new EvasionTickListener();
+        MinecraftForge.EVENT_BUS.register(evasionTickListener);
 
         auditDir = event.getServer().getWorldPath(LevelResource.ROOT).resolve("data").resolve("nationwars-audit");
         auditWriter = new AuditWriter(auditDir, writerThread);
@@ -310,6 +318,11 @@ public class NationWarsMod
             MinecraftForge.EVENT_BUS.unregister(captureTickListener);
             captureTickListener = null;
         }
+        if (evasionTickListener != null)
+        {
+            MinecraftForge.EVENT_BUS.unregister(evasionTickListener);
+            evasionTickListener = null;
+        }
         if (settlementBackstopListener != null)
         {
             MinecraftForge.EVENT_BUS.unregister(settlementBackstopListener);
@@ -355,6 +368,11 @@ public class NationWarsMod
     public WorkerPool getWorkerPool()
     {
         return workerPool;
+    }
+
+    public WriterThread getWriterThread()
+    {
+        return writerThread;
     }
 
     public ColumnRegistry getColumnRegistry()

@@ -85,6 +85,14 @@ public final class WorkerPool implements AutoCloseable
     }
 
     /**
+     * Current depth of the pending-work queue, for {@code /nationwars staff perf}.
+     */
+    public int queueDepth()
+    {
+        return executor.getQueue().size();
+    }
+
+    /**
      * Stops accepting new work and waits briefly for in-flight tasks to finish.
      */
     @Override

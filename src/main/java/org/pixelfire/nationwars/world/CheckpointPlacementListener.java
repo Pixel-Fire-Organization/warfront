@@ -22,6 +22,7 @@ import org.pixelfire.nationwars.state.Checkpoint;
 import org.pixelfire.nationwars.state.CheckpointFailureReason;
 import org.pixelfire.nationwars.state.CheckpointPlacementContext;
 import org.pixelfire.nationwars.state.CheckpointPlacementPreconditions;
+import org.pixelfire.nationwars.state.CheckpointSnapshot;
 import org.pixelfire.nationwars.state.CheckpointStatus;
 import org.pixelfire.nationwars.state.City;
 import org.pixelfire.nationwars.state.CityState;
@@ -188,9 +189,7 @@ public final class CheckpointPlacementListener
             OpacNations.claimChunks(server, level.dimension().location(), leaderUuid, claimedChunks);
         }
 
-        final CompoundTag after = new CompoundTag();
-        after.putUUID("checkpointId", checkpointId);
-        after.putUUID("cityId", matchedCity.cityId());
+        final CompoundTag after = CheckpointSnapshot.write(checkpoint);
         NationWarsMod.get().getAuditWriter().append(AuditEntry.of(
                 player.getUUID(), player.getGameProfile().getName(), matchedCity.ownerNationId(),
                 ActorRole.MEMBER, AuditSource.BLOCK,

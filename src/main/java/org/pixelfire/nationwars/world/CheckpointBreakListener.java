@@ -20,6 +20,7 @@ import org.pixelfire.nationwars.io.audit.ActorRole;
 import org.pixelfire.nationwars.io.audit.AuditEntry;
 import org.pixelfire.nationwars.io.audit.AuditSource;
 import org.pixelfire.nationwars.state.Checkpoint;
+import org.pixelfire.nationwars.state.CheckpointSnapshot;
 import org.pixelfire.nationwars.state.City;
 import org.pixelfire.nationwars.state.CityState;
 import org.pixelfire.nationwars.state.NationRegistry;
@@ -150,9 +151,7 @@ public final class CheckpointBreakListener
                     checkpoint.capturingNationId(), checkpoint.status(), expiresAt));
         }
 
-        final CompoundTag before = new CompoundTag();
-        before.putUUID("checkpointId", checkpoint.checkpointId());
-        before.putUUID("cityId", city.cityId());
+        final CompoundTag before = CheckpointSnapshot.write(checkpoint);
         NationWarsMod.get().getAuditWriter().append(AuditEntry.of(
                 breakingPlayer != null ? breakingPlayer.getUUID() : null,
                 breakingPlayer != null ? breakingPlayer.getGameProfile().getName() : "UNKNOWN",

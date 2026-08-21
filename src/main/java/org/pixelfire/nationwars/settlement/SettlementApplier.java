@@ -1,12 +1,14 @@
 package org.pixelfire.nationwars.settlement;
 
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import org.pixelfire.nationwars.NationWarsMod;
 import org.pixelfire.nationwars.io.audit.ActorRole;
 import org.pixelfire.nationwars.io.audit.AuditEntry;
 import org.pixelfire.nationwars.io.audit.AuditSource;
+import org.pixelfire.nationwars.state.City;
 import org.pixelfire.nationwars.state.NationRegistry;
 import org.pixelfire.nationwars.state.NationState;
 import org.pixelfire.nationwars.state.PeaceClause;
@@ -55,12 +57,17 @@ public final class SettlementApplier
             resolved.add(clause);
         }
 
+        final ListTag clauseLog = new ListTag();
+        final Set<UUID> affectedCityIds = new HashSet<>();
+
         registry.globalWriteLock().lock();
         try
         {
             for (int i = 0; i < clauses.size(); i++)
             {
-                resolved.get(i).apply(registry, server, war, clauses.get(i).params(), staffImposed);
+                final StagedClause staged = clauses.get(i);
+                clauseLog.add(logEntryFor(registry, staged, affectedCityIds));
+                resolved.get(i).apply(registry, server, war, staged.params(), staffImposed);
             }
             releaseUncoveredOccupations(registry, server, war, clauses);
             finalizeWar(registry, war, outcome);
@@ -72,11 +79,38 @@ public final class SettlementApplier
 
         final CompoundTag after = new CompoundTag();
         after.putString("outcome", outcome.name());
-        after.putInt("clauseCount", clauses.size());
+        after.putBoolean("staffImposed", staffImposed);
+        after.put("clauses", clauseLog);
+        final List<UUID> targets = new ArrayList<>();
+        targets.add(war.warId());
+        targets.addAll(affectedCityIds);
         NationWarsMod.get().getAuditWriter().append(AuditEntry.of(null, "SYSTEM", war.attackers().primaryNationId(),
                 ActorRole.SYSTEM, AuditSource.COMMAND, ResourceLocation.tryBuild(NationWarsMod.MODID, "settlement_applied"),
-                List.of(war.warId()), new CompoundTag(), after, true));
+                targets, new CompoundTag(), after, true));
         return Optional.empty();
+    }
+
+    /**
+     * One clause's replay record: its type, its own params, and — for {@code TransferCity} only — the
+     * city's owner immediately before this clause applied, which a revert needs and nothing else in
+     * {@code params} captures.
+     */
+    private static CompoundTag logEntryFor(final NationRegistry registry, final StagedClause staged, final Set<UUID> affectedCityIds)
+    {
+        final CompoundTag entry = new CompoundTag();
+        entry.putString("clauseTypeId", staged.clauseTypeId().toString());
+        entry.put("params", staged.params().copy());
+        if (staged.clauseTypeId().equals(TransferCityClause.ID))
+        {
+            final UUID cityId = staged.params().getUUID("cityId");
+            affectedCityIds.add(cityId);
+            final City city = registry.cities().get(cityId);
+            if (city != null)
+            {
+                entry.putUUID("previousOwnerNationId", city.ownerNationId());
+            }
+        }
+        return entry;
     }
 
     /**

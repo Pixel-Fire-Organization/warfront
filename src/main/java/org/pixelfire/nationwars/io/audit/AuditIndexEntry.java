@@ -18,11 +18,12 @@ public record AuditIndexEntry(
         String actorName,
         ResourceLocation actionType,
         List<UUID> targets,
-        boolean reversible)
+        boolean reversible,
+        String revertOf)
 {
     public static AuditIndexEntry summarize(final AuditEntry entry)
     {
         return new AuditIndexEntry(entry.entryId(), entry.timestamp(), entry.actorUuid(), entry.actorName(),
-                entry.actionType(), entry.targets(), entry.reversible());
+                entry.actionType(), entry.targets(), entry.reversible(), entry.revertOf());
     }
 }

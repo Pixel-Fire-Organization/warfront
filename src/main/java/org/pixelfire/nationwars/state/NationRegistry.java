@@ -23,6 +23,7 @@ public final class NationRegistry
     private final ConcurrentMap<UUID, War> wars = new ConcurrentHashMap<>();
     private final ConcurrentMap<UUID, NationState> nationStates = new ConcurrentHashMap<>();
     private final ConcurrentMap<UUID, PeaceSettlement> settlements = new ConcurrentHashMap<>();
+    private final ConcurrentMap<EvasionKey, EvasionTracker> evasionTrackers = new ConcurrentHashMap<>();
 
     private final StripedLocks stripedLocks;
     private final Lock globalWriteLock = new ReentrantLock();
@@ -62,6 +63,17 @@ public final class NationRegistry
     public ConcurrentMap<UUID, PeaceSettlement> settlements()
     {
         return settlements;
+    }
+
+    /**
+     * Per (war, nation) evasion-surrender clocks. The spec lists {@code EvasionTracker} under
+     * "transient trackers" alongside {@code PlayerActivityData}/{@code CombatTracker} but then
+     * describes it as persisted per (war, nation) in the same breath — a top-level map here, like
+     * {@link #settlements()}, follows the persisted reading rather than the section heading.
+     */
+    public ConcurrentMap<EvasionKey, EvasionTracker> evasionTrackers()
+    {
+        return evasionTrackers;
     }
 
     public StripedLocks stripedLocks()

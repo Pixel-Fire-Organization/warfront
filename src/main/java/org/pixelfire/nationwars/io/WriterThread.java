@@ -63,6 +63,14 @@ public final class WriterThread implements AutoCloseable
     }
 
     /**
+     * Current depth of the pending-write queue, for {@code /nationwars staff perf}.
+     */
+    public int queueDepth()
+    {
+        return executor.getQueue().size();
+    }
+
+    /**
      * Stops accepting new writes and waits briefly for the queue to drain.
      */
     @Override

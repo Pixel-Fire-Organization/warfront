@@ -86,6 +86,28 @@ public final class AuditIndex
     }
 
     /**
+     * The union of every entry referencing any of {@code targetIds}, deduplicated by entry id — used by
+     * {@code /nationwars staff revert} to gather every entry that could possibly depend on the one being
+     * reverted.
+     */
+    public AuditQueryResult byTargets(final List<UUID> targetIds)
+    {
+        if (!ready)
+        {
+            return new AuditQueryResult.StillIndexing();
+        }
+        final Map<String, AuditIndexEntry> union = new HashMap<>();
+        for (final UUID targetId : targetIds)
+        {
+            for (final AuditIndexEntry entry : snapshot.byTarget.getOrDefault(targetId, List.of()))
+            {
+                union.put(entry.entryId(), entry);
+            }
+        }
+        return new AuditQueryResult.Entries(List.copyOf(union.values()));
+    }
+
+    /**
      * The one summary matching {@code entryId}, if the index is ready and knows of it. Distinguishing
      * "still indexing" from "not found" matters here too, so this mirrors the other query methods'
      * shape rather than returning a plain {@code Optional}.

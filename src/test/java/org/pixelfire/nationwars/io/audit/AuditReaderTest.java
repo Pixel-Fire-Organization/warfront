@@ -45,7 +45,7 @@ class AuditReaderTest
     void returnsEmptyWhenTheDayFileDoesNotExist() throws IOException
     {
         final AuditIndexEntry summary = new AuditIndexEntry(Ulid.generate(), System.currentTimeMillis(), UUID.randomUUID(),
-                "Ghost", ResourceLocation.tryBuild("nationwars", "nothing"), List.of(), false);
+                "Ghost", ResourceLocation.tryBuild("nationwars", "nothing"), List.of(), false, null);
 
         assertTrue(AuditReader.readFull(auditDir, summary).isEmpty());
     }
@@ -64,7 +64,7 @@ class AuditReaderTest
         }
 
         final AuditIndexEntry missingSummary = new AuditIndexEntry(Ulid.generate(), present.timestamp(), UUID.randomUUID(),
-                "Missing", ResourceLocation.tryBuild("nationwars", "nothing"), List.of(), false);
+                "Missing", ResourceLocation.tryBuild("nationwars", "nothing"), List.of(), false, null);
 
         assertTrue(AuditReader.readFull(auditDir, missingSummary).isEmpty());
     }
