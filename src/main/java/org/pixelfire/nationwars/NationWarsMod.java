@@ -34,6 +34,7 @@ import org.pixelfire.nationwars.io.audit.AuditSource;
 import org.pixelfire.nationwars.io.audit.AuditWriter;
 import org.pixelfire.nationwars.state.NationRegistry;
 import org.pixelfire.nationwars.state.PeaceClause;
+import org.pixelfire.nationwars.world.CityFoundingListener;
 import org.pixelfire.nationwars.world.ColumnProtectionListener;
 import org.pixelfire.nationwars.world.ColumnRegistry;
 import org.pixelfire.nationwars.world.OpacIntegration;
@@ -78,6 +79,7 @@ public class NationWarsMod
     private Path auditDir;
     private ColumnRegistry columnRegistry;
     private ColumnProtectionListener columnProtectionListener;
+    private CityFoundingListener cityFoundingListener;
 
     // Forge only ever constructs one instance of a mod's main class; command handlers (which have no
     // other way to reach this instance) resolve it through here.
@@ -159,6 +161,9 @@ public class NationWarsMod
         columnProtectionListener = new ColumnProtectionListener(columnRegistry);
         MinecraftForge.EVENT_BUS.register(columnProtectionListener);
 
+        cityFoundingListener = new CityFoundingListener();
+        MinecraftForge.EVENT_BUS.register(cityFoundingListener);
+
         auditDir = event.getServer().getWorldPath(LevelResource.ROOT).resolve("data").resolve("nationwars-audit");
         auditWriter = new AuditWriter(auditDir, writerThread);
         auditIndex = new AuditIndex();
@@ -189,6 +194,11 @@ public class NationWarsMod
         {
             MinecraftForge.EVENT_BUS.unregister(columnProtectionListener);
             columnProtectionListener = null;
+        }
+        if (cityFoundingListener != null)
+        {
+            MinecraftForge.EVENT_BUS.unregister(cityFoundingListener);
+            cityFoundingListener = null;
         }
         columnRegistry = null;
         if (writerThread != null)
@@ -232,5 +242,10 @@ public class NationWarsMod
     public ColumnRegistry getColumnRegistry()
     {
         return columnRegistry;
+    }
+
+    public NationRegistry getNationRegistry()
+    {
+        return nationRegistry;
     }
 }
