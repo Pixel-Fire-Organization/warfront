@@ -22,6 +22,7 @@ public final class NationRegistry
     private final ConcurrentMap<UUID, Checkpoint> checkpoints = new ConcurrentHashMap<>();
     private final ConcurrentMap<UUID, War> wars = new ConcurrentHashMap<>();
     private final ConcurrentMap<UUID, NationState> nationStates = new ConcurrentHashMap<>();
+    private final ConcurrentMap<UUID, PeaceSettlement> settlements = new ConcurrentHashMap<>();
 
     private final StripedLocks stripedLocks;
     private final Lock globalWriteLock = new ReentrantLock();
@@ -49,6 +50,18 @@ public final class NationRegistry
     public ConcurrentMap<UUID, NationState> nationStates()
     {
         return nationStates;
+    }
+
+    /**
+     * The current negotiation for a war, keyed by {@code warId} — at most one active proposal at a time.
+     * Not part of the {@code War} record itself (the spec nests {@code stagedSettlement} directly there);
+     * kept as its own map instead, consistent with cities/checkpoints/wars/nationStates already being
+     * separate top-level maps rather than nested fields, and to avoid touching every existing
+     * {@code War} constructor call for what is fundamentally a much shorter-lived piece of state.
+     */
+    public ConcurrentMap<UUID, PeaceSettlement> settlements()
+    {
+        return settlements;
     }
 
     public StripedLocks stripedLocks()

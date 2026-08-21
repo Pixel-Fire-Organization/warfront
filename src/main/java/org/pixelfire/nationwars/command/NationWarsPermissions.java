@@ -26,6 +26,10 @@ public final class NationWarsPermissions
             NationWarsMod.MODID, "staff.inspect", PermissionTypes.BOOLEAN,
             (player, playerId, context) -> player != null && player.hasPermissions(NationWarsConfig.STAFF_PERMISSION_LEVEL.get()));
 
+    public static final PermissionNode<Boolean> STAFF_SETTLE = new PermissionNode<>(
+            NationWarsMod.MODID, "staff.settle", PermissionTypes.BOOLEAN,
+            (player, playerId, context) -> player != null && player.hasPermissions(NationWarsConfig.STAFF_PERMISSION_LEVEL.get()));
+
     private NationWarsPermissions()
     {
     }
@@ -33,6 +37,6 @@ public final class NationWarsPermissions
     @SubscribeEvent
     public static void gather(final PermissionGatherEvent.Nodes event)
     {
-        event.addNodes(STAFF_CONFIG, STAFF_INSPECT);
+        event.addNodes(STAFF_CONFIG, STAFF_INSPECT, STAFF_SETTLE);
     }
 }

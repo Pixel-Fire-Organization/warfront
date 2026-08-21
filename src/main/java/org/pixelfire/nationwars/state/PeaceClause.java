@@ -15,13 +15,19 @@ import java.util.Optional;
 public interface PeaceClause
 {
     /**
+     * @param staffImposed true for a staff-finalized settlement, which ignores war-score affordability
+     *                     limits — that is the point of an imposed peace — while still enforcing every
+     *                     structural check (a city exists, is a belligerent's, is actually occupied, and
+     *                     so on)
      * @return the validation failure message, or empty if {@code params} is valid against live state
      */
-    Optional<String> validate(NationRegistry registry, War war, CompoundTag params);
+    Optional<String> validate(NationRegistry registry, War war, CompoundTag params, boolean staffImposed);
 
     /**
      * Applies this clause. Only ever called after {@link #validate} returned empty for every clause in
-     * the same settlement, under the caller's global write lock.
+     * the same settlement, under the caller's global write lock. {@code staffImposed} carries the same
+     * meaning as in {@link #validate}: a staff transfer doesn't spend the recipient's war score, since
+     * there was no economy transaction to begin with, only a decision.
      */
-    void apply(NationRegistry registry, MinecraftServer server, War war, CompoundTag params);
+    void apply(NationRegistry registry, MinecraftServer server, War war, CompoundTag params, boolean staffImposed);
 }

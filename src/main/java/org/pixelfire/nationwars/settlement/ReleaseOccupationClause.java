@@ -26,7 +26,7 @@ public final class ReleaseOccupationClause implements PeaceClause
     public static final ResourceLocation ID = ResourceLocation.tryBuild("nationwars", "release_occupation");
 
     @Override
-    public Optional<String> validate(final NationRegistry registry, final War war, final CompoundTag params)
+    public Optional<String> validate(final NationRegistry registry, final War war, final CompoundTag params, final boolean staffImposed)
     {
         final UUID cityId = params.getUUID("cityId");
         final City city = registry.cities().get(cityId);
@@ -38,7 +38,8 @@ public final class ReleaseOccupationClause implements PeaceClause
     }
 
     @Override
-    public void apply(final NationRegistry registry, final MinecraftServer server, final War war, final CompoundTag params)
+    public void apply(final NationRegistry registry, final MinecraftServer server, final War war, final CompoundTag params,
+            final boolean staffImposed)
     {
         final UUID cityId = params.getUUID("cityId");
         final City city = registry.cities().get(cityId);

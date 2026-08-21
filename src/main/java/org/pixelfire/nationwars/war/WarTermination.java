@@ -60,9 +60,13 @@ public final class WarTermination
                 }
             }
 
+            // settlementWindow = 0 makes the lock indefinite, per spec — leave settlementDeadline at 0 then.
+            final long settlementWindowSeconds = NationWarsConfig.SETTLEMENT_WINDOW_SECONDS.get();
+            final long settlementDeadline = whitePeace || settlementWindowSeconds <= 0 ? 0L : now + settlementWindowSeconds * 1000L;
+
             registry.wars().put(war.warId(), new War(scored.warId(), scored.attackers(), scored.defenders(), targetPhase,
                     scored.declaredAt(), scored.activeAt(), scored.warExpiresAt(), scored.targetCityIds(), scored.occupiedCityIds(),
-                    scored.warScore(), scored.suspendedSince(), scored.contestedTimeMs(), scored.settlementDeadline(), outcome,
+                    scored.warScore(), scored.suspendedSince(), scored.contestedTimeMs(), settlementDeadline, outcome,
                     scored.memberTargetableAt()));
 
             if (whitePeace)

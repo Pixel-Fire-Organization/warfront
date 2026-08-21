@@ -37,7 +37,7 @@ public final class SettlementApplier
     }
 
     public static Optional<String> apply(final MinecraftServer server, final NationRegistry registry, final War war,
-            final List<StagedClause> clauses, final WarOutcome outcome)
+            final List<StagedClause> clauses, final WarOutcome outcome, final boolean staffImposed)
     {
         final List<PeaceClause> resolved = new ArrayList<>();
         for (final StagedClause staged : clauses)
@@ -47,7 +47,7 @@ public final class SettlementApplier
             {
                 return Optional.of("unknown clause type " + staged.clauseTypeId());
             }
-            final Optional<String> failure = clause.validate(registry, war, staged.params());
+            final Optional<String> failure = clause.validate(registry, war, staged.params(), staffImposed);
             if (failure.isPresent())
             {
                 return Optional.of(staged.clauseTypeId() + ": " + failure.get());
@@ -60,7 +60,7 @@ public final class SettlementApplier
         {
             for (int i = 0; i < clauses.size(); i++)
             {
-                resolved.get(i).apply(registry, server, war, clauses.get(i).params());
+                resolved.get(i).apply(registry, server, war, clauses.get(i).params(), staffImposed);
             }
             releaseUncoveredOccupations(registry, server, war, clauses);
             finalizeWar(registry, war, outcome);
@@ -102,7 +102,7 @@ public final class SettlementApplier
             {
                 final CompoundTag params = new CompoundTag();
                 params.putUUID("cityId", cityId);
-                fallbackRelease.apply(registry, server, registry.wars().getOrDefault(war.warId(), current), params);
+                fallbackRelease.apply(registry, server, registry.wars().getOrDefault(war.warId(), current), params, false);
             }
         }
     }

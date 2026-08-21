@@ -23,13 +23,14 @@ public final class CeasefireClause implements PeaceClause
     public static final ResourceLocation ID = ResourceLocation.tryBuild("nationwars", "ceasefire");
 
     @Override
-    public Optional<String> validate(final NationRegistry registry, final War war, final CompoundTag params)
+    public Optional<String> validate(final NationRegistry registry, final War war, final CompoundTag params, final boolean staffImposed)
     {
         return params.getLong("durationHours") > 0 ? Optional.empty() : Optional.of("ceasefire duration must be positive");
     }
 
     @Override
-    public void apply(final NationRegistry registry, final MinecraftServer server, final War war, final CompoundTag params)
+    public void apply(final NationRegistry registry, final MinecraftServer server, final War war, final CompoundTag params,
+            final boolean staffImposed)
     {
         final long expiresAt = System.currentTimeMillis() + params.getLong("durationHours") * 3_600_000L;
         for (final UUID attackerId : war.attackers().members())

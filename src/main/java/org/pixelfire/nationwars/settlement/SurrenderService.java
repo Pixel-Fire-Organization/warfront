@@ -53,6 +53,6 @@ public final class SurrenderService
         ceasefireParams.putLong("durationHours", NationWarsConfig.DEFAULT_POST_WAR_COOLDOWN_HOURS.get());
         clauses.add(new StagedClause(CeasefireClause.ID, ceasefireParams));
 
-        return SettlementApplier.apply(server, registry, war, clauses, WarOutcome.SURRENDER);
+        return SettlementApplier.apply(server, registry, war, clauses, WarOutcome.SURRENDER, false);
     }
 }

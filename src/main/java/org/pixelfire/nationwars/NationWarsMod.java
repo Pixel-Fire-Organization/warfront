@@ -52,6 +52,8 @@ import org.pixelfire.nationwars.world.block.NationWarsBlockEntities;
 import org.pixelfire.nationwars.world.block.NationWarsBlocks;
 import org.pixelfire.nationwars.world.block.NationWarsMenus;
 import org.pixelfire.nationwars.settlement.NationWarsPeaceClauses;
+import org.pixelfire.nationwars.settlement.NegotiationDraftTracker;
+import org.pixelfire.nationwars.settlement.SettlementBackstopListener;
 import org.pixelfire.nationwars.war.WarLifecycleListener;
 import org.pixelfire.nationwars.war.WarProtectionListener;
 import org.slf4j.Logger;
@@ -105,6 +107,8 @@ public class NationWarsMod
     private WarLifecycleListener warLifecycleListener;
     private WarProtectionListener warProtectionListener;
     private CaptureTickListener captureTickListener;
+    private SettlementBackstopListener settlementBackstopListener;
+    private NegotiationDraftTracker negotiationDraftTracker;
     private volatile boolean serverStopping;
 
     // Forge only ever constructs one instance of a mod's main class; command handlers (which have no
@@ -194,6 +198,10 @@ public class NationWarsMod
 
         captureTickListener = new CaptureTickListener();
         MinecraftForge.EVENT_BUS.register(captureTickListener);
+
+        settlementBackstopListener = new SettlementBackstopListener();
+        MinecraftForge.EVENT_BUS.register(settlementBackstopListener);
+        negotiationDraftTracker = new NegotiationDraftTracker();
 
         final CheckpointMoveGrace checkpointMoveGrace = new CheckpointMoveGrace();
         checkpointPlacementListener = new CheckpointPlacementListener(checkpointMoveGrace);
@@ -302,6 +310,12 @@ public class NationWarsMod
             MinecraftForge.EVENT_BUS.unregister(captureTickListener);
             captureTickListener = null;
         }
+        if (settlementBackstopListener != null)
+        {
+            MinecraftForge.EVENT_BUS.unregister(settlementBackstopListener);
+            settlementBackstopListener = null;
+        }
+        negotiationDraftTracker = null;
         activityTracker = null;
         combatTagTracker = null;
         columnRegistry = null;
@@ -366,5 +380,10 @@ public class NationWarsMod
     public boolean isServerStopping()
     {
         return serverStopping;
+    }
+
+    public NegotiationDraftTracker getNegotiationDraftTracker()
+    {
+        return negotiationDraftTracker;
     }
 }

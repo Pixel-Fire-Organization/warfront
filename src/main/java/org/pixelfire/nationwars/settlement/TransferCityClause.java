@@ -33,7 +33,7 @@ public final class TransferCityClause implements PeaceClause
     public static final ResourceLocation ID = ResourceLocation.tryBuild("nationwars", "transfer_city");
 
     @Override
-    public Optional<String> validate(final NationRegistry registry, final War war, final CompoundTag params)
+    public Optional<String> validate(final NationRegistry registry, final War war, final CompoundTag params, final boolean staffImposed)
     {
         final UUID cityId = params.getUUID("cityId");
         final UUID toNationId = params.getUUID("toNationId");
@@ -46,6 +46,10 @@ public final class TransferCityClause implements PeaceClause
         {
             return Optional.of("city is not owned by a belligerent of this war");
         }
+        if (staffImposed)
+        {
+            return Optional.empty();
+        }
         final double cityValue = valueOf(city);
         final long recipientScore = war.warScore().getOrDefault(toNationId, 0L);
         if (recipientScore < cityValue)
@@ -57,7 +61,8 @@ public final class TransferCityClause implements PeaceClause
     }
 
     @Override
-    public void apply(final NationRegistry registry, final MinecraftServer server, final War war, final CompoundTag params)
+    public void apply(final NationRegistry registry, final MinecraftServer server, final War war, final CompoundTag params,
+            final boolean staffImposed)
     {
         final UUID cityId = params.getUUID("cityId");
         final UUID toNationId = params.getUUID("toNationId");
@@ -70,7 +75,10 @@ public final class TransferCityClause implements PeaceClause
         final long now = System.currentTimeMillis();
         final long lockUntil = now + NationWarsConfig.OCCUPATION_LOCK_DURATION_SECONDS.get() * 1000L;
 
-        registry.wars().put(war.warId(), WarScore.applyAward(registry.wars().getOrDefault(war.warId(), war), toNationId, -cityValue));
+        if (!staffImposed)
+        {
+            registry.wars().put(war.warId(), WarScore.applyAward(registry.wars().getOrDefault(war.warId(), war), toNationId, -cityValue));
+        }
 
         registry.cities().put(cityId, new City(city.cityId(), city.name(), toNationId, city.founderNationId(), city.dimension(),
                 city.corePos(), city.tier(), city.bankedPayment(), city.checkpointIds(), CityState.ACTIVE, null, 0L, lockUntil,

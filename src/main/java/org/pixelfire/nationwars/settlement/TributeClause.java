@@ -26,17 +26,20 @@ public final class TributeClause implements PeaceClause
     public static final ResourceLocation ID = ResourceLocation.tryBuild("nationwars", "tribute");
 
     @Override
-    public Optional<String> validate(final NationRegistry registry, final War war, final CompoundTag params)
+    public Optional<String> validate(final NationRegistry registry, final War war, final CompoundTag params, final boolean staffImposed)
     {
-        final UUID fromNationId = params.getUUID("from");
         final UUID toNationId = params.getUUID("to");
         final long value = params.getLong("value");
 
-        final long available = payerCities(registry, fromNationId).stream().mapToLong(City::bankedPayment).sum();
+        final long available = payerCities(registry, params.getUUID("from")).stream().mapToLong(City::bankedPayment).sum();
         if (available < value)
         {
             return Optional.of("payer cannot cover this tribute (needs " + value + ", has " + available
                     + " banked, short " + (value - available) + ")");
+        }
+        if (staffImposed)
+        {
+            return Optional.empty();
         }
         final long recipientScore = war.warScore().getOrDefault(toNationId, 0L);
         if (recipientScore < value)
@@ -48,13 +51,13 @@ public final class TributeClause implements PeaceClause
     }
 
     @Override
-    public void apply(final NationRegistry registry, final MinecraftServer server, final War war, final CompoundTag params)
+    public void apply(final NationRegistry registry, final MinecraftServer server, final War war, final CompoundTag params,
+            final boolean staffImposed)
     {
-        final UUID fromNationId = params.getUUID("from");
         final UUID toNationId = params.getUUID("to");
         long remaining = params.getLong("value");
 
-        for (final City city : payerCities(registry, fromNationId))
+        for (final City city : payerCities(registry, params.getUUID("from")))
         {
             if (remaining <= 0)
             {
@@ -72,8 +75,11 @@ public final class TributeClause implements PeaceClause
             }
         }
 
-        registry.wars().put(war.warId(), WarScore.applyAward(registry.wars().getOrDefault(war.warId(), war),
-                toNationId, -params.getLong("value")));
+        if (!staffImposed)
+        {
+            registry.wars().put(war.warId(), WarScore.applyAward(registry.wars().getOrDefault(war.warId(), war),
+                    toNationId, -params.getLong("value")));
+        }
     }
 
     private static List<City> payerCities(final NationRegistry registry, final UUID nationId)
