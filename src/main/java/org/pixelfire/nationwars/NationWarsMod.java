@@ -51,6 +51,7 @@ import org.pixelfire.nationwars.world.block.NationWarsBlockEntities;
 import org.pixelfire.nationwars.world.block.NationWarsBlocks;
 import org.pixelfire.nationwars.world.block.NationWarsMenus;
 import org.pixelfire.nationwars.war.WarLifecycleListener;
+import org.pixelfire.nationwars.war.WarProtectionListener;
 import org.slf4j.Logger;
 
 import java.nio.file.Path;
@@ -100,6 +101,7 @@ public class NationWarsMod
     private CombatLogListener combatLogListener;
     private LoginShieldListener loginShieldListener;
     private WarLifecycleListener warLifecycleListener;
+    private WarProtectionListener warProtectionListener;
     private volatile boolean serverStopping;
 
     // Forge only ever constructs one instance of a mod's main class; command handlers (which have no
@@ -205,6 +207,8 @@ public class NationWarsMod
         MinecraftForge.EVENT_BUS.register(loginShieldListener);
         warLifecycleListener = new WarLifecycleListener();
         MinecraftForge.EVENT_BUS.register(warLifecycleListener);
+        warProtectionListener = new WarProtectionListener();
+        MinecraftForge.EVENT_BUS.register(warProtectionListener);
 
         auditDir = event.getServer().getWorldPath(LevelResource.ROOT).resolve("data").resolve("nationwars-audit");
         auditWriter = new AuditWriter(auditDir, writerThread);
@@ -280,6 +284,11 @@ public class NationWarsMod
         {
             MinecraftForge.EVENT_BUS.unregister(warLifecycleListener);
             warLifecycleListener = null;
+        }
+        if (warProtectionListener != null)
+        {
+            MinecraftForge.EVENT_BUS.unregister(warProtectionListener);
+            warProtectionListener = null;
         }
         activityTracker = null;
         combatTagTracker = null;
