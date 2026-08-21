@@ -145,6 +145,11 @@ public final class CaptureTickListener
             return;
         }
 
+        if (applyUnloadedDecayCatchUp(registry, checkpoint, now, dtSeconds))
+        {
+            return;
+        }
+
         final int attackers = countPresent(server, level, checkpoint, war, currentTick, true);
         final int defenders = countPresent(server, level, checkpoint, war, currentTick, false);
 
@@ -209,6 +214,35 @@ public final class CaptureTickListener
                 NationWarsNetwork.sendTo(player, packet);
             }
         }
+    }
+
+    /**
+     * While a checkpoint's chunk was unloaded, nobody could possibly have been present in its
+     * zone, so the whole elapsed gap decays in one step here rather than being silently skipped —
+     * exactly equivalent to having ticked throughout, since decay is linear and monotonic toward zero.
+     * A gap under twice the normal tick interval is treated as ordinary per-tick evaluation instead,
+     * since the chunk was plausibly loaded continuously and this is just its regular cadence.
+     *
+     * @return true if a catch-up step was applied (the caller should skip normal evaluation this pass)
+     */
+    private boolean applyUnloadedDecayCatchUp(final NationRegistry registry, final Checkpoint checkpoint, final long now,
+            final double normalDtSeconds)
+    {
+        final long elapsedMs = now - checkpoint.lastEvaluatedTime();
+        final long normalIntervalMs = (long) (normalDtSeconds * 1000.0);
+        if (elapsedMs <= normalIntervalMs * 2)
+        {
+            return false;
+        }
+
+        final float caughtUpProgress = CaptureProgress.step(checkpoint.captureProgress(), 0, 0, elapsedMs / 1000.0,
+                NationWarsConfig.BASE_CAPTURE_RATE.get(), NationWarsConfig.DEFENDER_RECOVERY_RATE.get(),
+                NationWarsConfig.DECAY_RATE.get(), NationWarsConfig.ATTACKER_STACK_BONUS.get(), NationWarsConfig.ATTACKER_STACK_CAP.get());
+        registry.checkpoints().put(checkpoint.checkpointId(), new Checkpoint(checkpoint.checkpointId(), checkpoint.cityId(),
+                checkpoint.dimension(), checkpoint.pos(), checkpoint.holderNationId(), caughtUpProgress, checkpoint.capturingNationId(),
+                caughtUpProgress <= 0f ? CheckpointStatus.HELD : checkpoint.status(), checkpoint.claimedChunks(), now,
+                checkpoint.placedBy(), checkpoint.placedAt()));
+        return true;
     }
 
     private int countPresent(final MinecraftServer server, final ServerLevel level, final Checkpoint checkpoint, final War war,

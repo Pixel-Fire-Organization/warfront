@@ -160,6 +160,7 @@ public final class WarDeclarationService
         final Set<UUID> targetCityIds = defenders.members().stream()
                 .flatMap(nationId -> citiesOf(registry, nationId).stream())
                 .filter(city -> city.state() != CityState.DORMANT)
+                .filter(city -> now >= city.occupationLockUntil())
                 .map(City::cityId)
                 .collect(Collectors.toUnmodifiableSet());
 

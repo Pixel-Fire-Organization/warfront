@@ -297,7 +297,8 @@ public final class WarLifecycleListener
         {
             for (final City city : registry.cities().values())
             {
-                if (city.ownerNationId().equals(nationId) && city.state() != CityState.DORMANT)
+                if (city.ownerNationId().equals(nationId) && city.state() != CityState.DORMANT
+                        && now >= city.occupationLockUntil())
                 {
                     targetCityIds.add(city.cityId());
                 }

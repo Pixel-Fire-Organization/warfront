@@ -46,6 +46,7 @@ import org.pixelfire.nationwars.world.CheckpointPlacementListener;
 import org.pixelfire.nationwars.world.CityDormancyListener;
 import org.pixelfire.nationwars.world.CityFoundingListener;
 import org.pixelfire.nationwars.world.CityRenderEffectsListener;
+import org.pixelfire.nationwars.world.ValidationSweepListener;
 import org.pixelfire.nationwars.world.ColumnProtectionListener;
 import org.pixelfire.nationwars.world.ColumnRegistry;
 import org.pixelfire.nationwars.world.OpacIntegration;
@@ -114,6 +115,7 @@ public class NationWarsMod
     private CaptureTickListener captureTickListener;
     private EvasionTickListener evasionTickListener;
     private CityRenderEffectsListener cityRenderEffectsListener;
+    private ValidationSweepListener validationSweepListener;
     private SettlementBackstopListener settlementBackstopListener;
     private NegotiationDraftTracker negotiationDraftTracker;
     private volatile boolean serverStopping;
@@ -238,6 +240,8 @@ public class NationWarsMod
         MinecraftForge.EVENT_BUS.register(evasionTickListener);
         cityRenderEffectsListener = new CityRenderEffectsListener();
         MinecraftForge.EVENT_BUS.register(cityRenderEffectsListener);
+        validationSweepListener = new ValidationSweepListener();
+        MinecraftForge.EVENT_BUS.register(validationSweepListener);
 
         auditDir = event.getServer().getWorldPath(LevelResource.ROOT).resolve("data").resolve("nationwars-audit");
         auditWriter = new AuditWriter(auditDir, writerThread);
@@ -333,6 +337,11 @@ public class NationWarsMod
         {
             MinecraftForge.EVENT_BUS.unregister(cityRenderEffectsListener);
             cityRenderEffectsListener = null;
+        }
+        if (validationSweepListener != null)
+        {
+            MinecraftForge.EVENT_BUS.unregister(validationSweepListener);
+            validationSweepListener = null;
         }
         if (settlementBackstopListener != null)
         {
