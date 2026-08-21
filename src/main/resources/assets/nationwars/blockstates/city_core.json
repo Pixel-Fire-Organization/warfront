@@ -1,0 +1,5 @@
+{
+  "variants": {
+    "": { "model": "nationwars:block/city_core" }
+  }
+}

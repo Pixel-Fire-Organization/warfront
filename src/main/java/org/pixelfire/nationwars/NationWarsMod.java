@@ -35,6 +35,8 @@ import org.pixelfire.nationwars.io.audit.AuditWriter;
 import org.pixelfire.nationwars.state.NationRegistry;
 import org.pixelfire.nationwars.state.PeaceClause;
 import org.pixelfire.nationwars.world.OpacIntegration;
+import org.pixelfire.nationwars.world.block.NationWarsBlockEntities;
+import org.pixelfire.nationwars.world.block.NationWarsBlocks;
 import org.slf4j.Logger;
 
 import java.nio.file.Path;
@@ -84,6 +86,9 @@ public class NationWarsMod
         IEventBus modEventBus = context.getModEventBus();
 
         modEventBus.addListener(this::commonSetup);
+
+        NationWarsBlocks.bootstrap();
+        NationWarsBlockEntities.bootstrap();
 
         BLOCKS.register(modEventBus);
         ITEMS.register(modEventBus);
