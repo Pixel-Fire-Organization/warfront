@@ -11,6 +11,7 @@ import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.LogicalSide;
 import org.pixelfire.nationwars.NationWarsMod;
+import org.pixelfire.nationwars.compute.TickTimer;
 import org.pixelfire.nationwars.config.NationWarsConfig;
 import org.pixelfire.nationwars.io.audit.ActorRole;
 import org.pixelfire.nationwars.io.audit.AuditEntry;
@@ -51,7 +52,13 @@ public final class CaptureTickListener
     private final CheckpointLockout lockout = new CheckpointLockout();
     private final CheckpointCosmeticEffect cosmeticEffect = new CheckpointCosmeticEffect();
     private final CheckpointBossBarTracker bossBarTracker = new CheckpointBossBarTracker();
+    private final TickTimer perfTimer = new TickTimer(64);
     private int tickCounter;
+
+    public TickTimer perfTimer()
+    {
+        return perfTimer;
+    }
 
     @SubscribeEvent
     public void onServerTick(final TickEvent.ServerTickEvent event)
@@ -70,6 +77,7 @@ public final class CaptureTickListener
         }
         tickCounter = 0;
 
+        final long startNanos = System.nanoTime();
         final NationRegistry registry = NationWarsMod.get().getNationRegistry();
         final long now = System.currentTimeMillis();
         final long currentTick = server.overworld().getGameTime();
@@ -89,6 +97,7 @@ public final class CaptureTickListener
         }
 
         updateSiegeState(registry);
+        perfTimer.record(System.nanoTime() - startNanos);
     }
 
     private void evaluateCity(final MinecraftServer server, final NationRegistry registry, final War war, final UUID cityId,
@@ -464,6 +473,7 @@ public final class CaptureTickListener
                 new CompoundTag(), new CompoundTag(), false));
 
         CitySyncHelper.broadcast(server, registry, registry.cities().get(city.cityId()));
+        NationWarsMod.get().forceSave();
     }
 
     private void releaseOccupation(final MinecraftServer server, final NationRegistry registry, final War war, final City city)
@@ -499,6 +509,7 @@ public final class CaptureTickListener
                 new CompoundTag(), new CompoundTag(), false));
 
         CitySyncHelper.broadcast(server, registry, registry.cities().get(city.cityId()));
+        NationWarsMod.get().forceSave();
     }
 
     /**

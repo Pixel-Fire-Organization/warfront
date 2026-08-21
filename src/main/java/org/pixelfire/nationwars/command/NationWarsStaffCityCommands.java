@@ -266,6 +266,7 @@ public final class NationWarsStaffCityCommands
         NationWarsMod.get().getAuditWriter().append(AuditEntry.of(null, "SYSTEM", city.ownerNationId(), ActorRole.STAFF,
                 AuditSource.COMMAND, ResourceLocation.tryBuild(NationWarsMod.MODID, "staff_city_delete"),
                 List.of(city.cityId()), new CompoundTag(), new CompoundTag(), false));
+        NationWarsMod.get().forceSave();
 
         context.getSource().sendSuccess(() -> Component.literal("Deleted " + city.name() + "."), true);
         return 1;

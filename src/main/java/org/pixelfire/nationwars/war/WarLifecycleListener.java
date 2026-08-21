@@ -11,6 +11,7 @@ import net.minecraftforge.fml.LogicalSide;
 import org.pixelfire.nationwars.NationWarsMod;
 import org.pixelfire.nationwars.activity.PlayerActivityState;
 import org.pixelfire.nationwars.activity.Readiness;
+import org.pixelfire.nationwars.compute.TickTimer;
 import org.pixelfire.nationwars.config.NationWarsConfig;
 import org.pixelfire.nationwars.io.audit.ActorRole;
 import org.pixelfire.nationwars.io.audit.AuditEntry;
@@ -50,8 +51,14 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class WarLifecycleListener
 {
     private final Map<UUID, Long> readinessFailingSince = new ConcurrentHashMap<>();
+    private final TickTimer perfTimer = new TickTimer(64);
     private int tickCounter;
     private int oneSecondCounter;
+
+    public TickTimer perfTimer()
+    {
+        return perfTimer;
+    }
 
     @SubscribeEvent
     public void onServerTick(final TickEvent.ServerTickEvent event)
@@ -67,6 +74,7 @@ public final class WarLifecycleListener
         tickCounter = 0;
         oneSecondCounter++;
 
+        final long startNanos = System.nanoTime();
         final MinecraftServer server = event.getServer();
         final NationRegistry registry = NationWarsMod.get().getNationRegistry();
         final long now = System.currentTimeMillis();
@@ -90,6 +98,7 @@ public final class WarLifecycleListener
                 WarStateSync.sendWarScores(server, registry.wars().getOrDefault(war.warId(), war));
             }
         }
+        perfTimer.record(System.nanoTime() - startNanos);
     }
 
     private void evaluatePhase(final MinecraftServer server, final NationRegistry registry, final War war, final long now)
@@ -170,6 +179,7 @@ public final class WarLifecycleListener
                 war.occupiedCityIds(), war.warScore(), suspendedSince, war.contestedTimeMs(), war.settlementDeadline(),
                 war.outcome(), war.memberTargetableAt())), war.warId());
         WarStateSync.broadcastWarAndCoalitions(server, registry.wars().get(war.warId()));
+        NationWarsMod.get().forceSave();
     }
 
     private void evaluatePendingEntries(final MinecraftServer server, final NationRegistry registry, final War war, final long now)

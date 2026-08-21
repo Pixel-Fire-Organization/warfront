@@ -191,6 +191,7 @@ public final class CityDormancyListener
         NationWarsMod.get().getAuditWriter().append(AuditEntry.of(null, "SYSTEM", city.ownerNationId(), ActorRole.SYSTEM,
                 AuditSource.AUTO, ResourceLocation.tryBuild(NationWarsMod.MODID, "city_removed_dormant_expiry"),
                 List.of(city.cityId()), new CompoundTag(), new CompoundTag(), false));
+        NationWarsMod.get().forceSave();
     }
 
     private static City withState(final City city, final CityState state, final long dormantSince)

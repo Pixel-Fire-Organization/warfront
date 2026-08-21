@@ -9,6 +9,7 @@ import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.LogicalSide;
 import org.pixelfire.nationwars.NationWarsMod;
+import org.pixelfire.nationwars.compute.TickTimer;
 import org.pixelfire.nationwars.config.NationWarsConfig;
 import org.pixelfire.nationwars.config.TierDefinition;
 import org.pixelfire.nationwars.io.audit.ActorRole;
@@ -43,7 +44,13 @@ import java.util.UUID;
  */
 public final class ValidationSweepListener
 {
+    private final TickTimer perfTimer = new TickTimer(64);
     private int tickCounter;
+
+    public TickTimer perfTimer()
+    {
+        return perfTimer;
+    }
 
     @SubscribeEvent
     public void onServerTick(final TickEvent.ServerTickEvent event)
@@ -59,6 +66,7 @@ public final class ValidationSweepListener
         }
         tickCounter = 0;
 
+        final long startNanos = System.nanoTime();
         final MinecraftServer server = event.getServer();
         final NationRegistry registry = NationWarsMod.get().getNationRegistry();
 
@@ -71,6 +79,7 @@ public final class ValidationSweepListener
             pruneDisbandedCoalitionMembers(server, registry, war);
         }
         pruneOrphanedEvasionTrackers(registry);
+        perfTimer.record(System.nanoTime() - startNanos);
     }
 
     private void sweepCity(final MinecraftServer server, final NationRegistry registry, final City city)

@@ -87,6 +87,7 @@ public final class SettlementApplier
         NationWarsMod.get().getAuditWriter().append(AuditEntry.of(null, "SYSTEM", war.attackers().primaryNationId(),
                 ActorRole.SYSTEM, AuditSource.COMMAND, ResourceLocation.tryBuild(NationWarsMod.MODID, "settlement_applied"),
                 targets, new CompoundTag(), after, true));
+        NationWarsMod.get().forceSave();
         return Optional.empty();
     }
 

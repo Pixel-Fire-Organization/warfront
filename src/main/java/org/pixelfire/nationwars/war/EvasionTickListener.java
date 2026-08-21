@@ -8,6 +8,7 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.LogicalSide;
 import org.pixelfire.nationwars.NationWarsMod;
 import org.pixelfire.nationwars.activity.Readiness;
+import org.pixelfire.nationwars.compute.TickTimer;
 import org.pixelfire.nationwars.config.NationWarsConfig;
 import org.pixelfire.nationwars.network.NationWarsNetwork;
 import org.pixelfire.nationwars.network.SyncEvasionWarningPacket;
@@ -33,7 +34,13 @@ import java.util.UUID;
 public final class EvasionTickListener
 {
     private static final long STEP_MS = 1000L;
+    private final TickTimer perfTimer = new TickTimer(64);
     private int tickCounter;
+
+    public TickTimer perfTimer()
+    {
+        return perfTimer;
+    }
 
     @SubscribeEvent
     public void onServerTick(final TickEvent.ServerTickEvent event)
@@ -48,6 +55,7 @@ public final class EvasionTickListener
         }
         tickCounter = 0;
 
+        final long startNanos = System.nanoTime();
         final MinecraftServer server = event.getServer();
         final NationRegistry registry = NationWarsMod.get().getNationRegistry();
         final long participationMinimumMs = NationWarsConfig.WAR_PARTICIPATION_MINIMUM_SECONDS.get() * 1000L;
@@ -66,6 +74,7 @@ public final class EvasionTickListener
                 evaluateSide(server, registry, war, war.attackers(), war.defenders(), participationMinimumMs, evasionLimitMs);
             }
         }
+        perfTimer.record(System.nanoTime() - startNanos);
     }
 
     private void evaluateSide(final MinecraftServer server, final NationRegistry registry, final War war, final Coalition ownSide,

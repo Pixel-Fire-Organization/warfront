@@ -26,6 +26,7 @@ import org.pixelfire.nationwars.compute.WorkerPool;
 import org.pixelfire.nationwars.config.NationWarsConfig;
 import org.pixelfire.nationwars.io.NationWarsLogging;
 import org.pixelfire.nationwars.io.NationWarsSavedData;
+import org.pixelfire.nationwars.io.PersistenceIo;
 import org.pixelfire.nationwars.io.WriterThread;
 import org.pixelfire.nationwars.io.audit.ActorRole;
 import org.pixelfire.nationwars.io.audit.AuditEntry;
@@ -64,6 +65,9 @@ import org.pixelfire.nationwars.war.WarLifecycleListener;
 import org.pixelfire.nationwars.war.WarProtectionListener;
 import org.slf4j.Logger;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -94,6 +98,9 @@ public class NationWarsMod
     private static final int WRITER_QUEUE_CAPACITY = 256;
 
     private NationRegistry nationRegistry;
+    private NationWarsSavedData savedData;
+    private PersistenceIo persistenceIo;
+    private File savedDataFile;
     private WorkerPool workerPool;
     private WriterThread writerThread;
     private AuditWriter auditWriter;
@@ -253,12 +260,22 @@ public class NationWarsMod
                 ResourceLocation.tryBuild(MODID, "diagnostic_synthetic_entry"), List.of(),
                 new CompoundTag(), new CompoundTag(), false));
 
-        final NationWarsSavedData savedData = NationWarsSavedData.get(event.getServer());
+        persistenceIo = new PersistenceIo(writerThread);
+        savedDataFile = event.getServer().getWorldPath(LevelResource.ROOT).resolve("data").resolve("nationwars.dat").toFile();
+        try
+        {
+            savedData = PersistenceIo.load(savedDataFile);
+        }
+        catch (final IOException e)
+        {
+            throw new UncheckedIOException("failed to load " + savedDataFile, e);
+        }
+        savedData.applyTo(nationRegistry);
 
         LOGGER.info("nationwars starting; lockStripes={}, workerThreads={}, workerQueueCapacity={}, "
-                        + "savedDataSchemaVersion={}, auditRetentionDays={}",
-                lockStripes, workerThreads, workerQueueCapacity, NationWarsSavedData.CURRENT_SCHEMA_VERSION, auditRetentionDays);
-        LOGGER.debug("nationwars save data attached: dummyPayload='{}'", savedData.dummyPayload());
+                        + "savedDataSchemaVersion={}, auditRetentionDays={}, citiesLoaded={}, warsLoaded={}",
+                lockStripes, workerThreads, workerQueueCapacity, NationWarsSavedData.CURRENT_SCHEMA_VERSION, auditRetentionDays,
+                nationRegistry.cities().size(), nationRegistry.wars().size());
     }
 
     @SubscribeEvent
@@ -352,6 +369,9 @@ public class NationWarsMod
         activityTracker = null;
         combatTagTracker = null;
         columnRegistry = null;
+        // Save before closing the writer thread: close() drains its queue, so a save enqueued here is
+        // guaranteed to have actually landed on disk by the time the writer thread stops.
+        forceSave();
         if (writerThread != null)
         {
             writerThread.close();
@@ -362,7 +382,25 @@ public class NationWarsMod
             workerPool.close();
             workerPool = null;
         }
+        savedData = null;
+        persistenceIo = null;
+        savedDataFile = null;
         nationRegistry = null;
+    }
+
+    /**
+     * Snapshots the live registry into the attached save data and queues the encode-and-write on the
+     * writer thread. Called at every force-save trigger the spec names (war phase transitions,
+     * occupations, settlements, disbandments) — the moments losing unsaved progress would actually
+     * matter — rather than relying solely on some periodic autosave.
+     */
+    public void forceSave()
+    {
+        if (savedData != null && nationRegistry != null && persistenceIo != null)
+        {
+            savedData.syncFromRegistry(nationRegistry);
+            persistenceIo.save(savedData, savedDataFile);
+        }
     }
 
     public static NationWarsMod get()
@@ -423,5 +461,25 @@ public class NationWarsMod
     public NegotiationDraftTracker getNegotiationDraftTracker()
     {
         return negotiationDraftTracker;
+    }
+
+    public CaptureTickListener getCaptureTickListener()
+    {
+        return captureTickListener;
+    }
+
+    public WarLifecycleListener getWarLifecycleListener()
+    {
+        return warLifecycleListener;
+    }
+
+    public EvasionTickListener getEvasionTickListener()
+    {
+        return evasionTickListener;
+    }
+
+    public ValidationSweepListener getValidationSweepListener()
+    {
+        return validationSweepListener;
     }
 }

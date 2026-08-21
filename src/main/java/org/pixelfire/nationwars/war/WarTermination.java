@@ -95,6 +95,7 @@ public final class WarTermination
         NationWarsMod.get().getAuditWriter().append(AuditEntry.of(null, "SYSTEM", war.attackers().primaryNationId(),
                 ActorRole.SYSTEM, AuditSource.AUTO, ResourceLocation.tryBuild(NationWarsMod.MODID, "war_concluded"),
                 List.of(war.warId()), new CompoundTag(), after, false));
+        NationWarsMod.get().forceSave();
     }
 
     private static void closeOut(final NationRegistry registry, final War war, final WarOutcome outcome, final long now)

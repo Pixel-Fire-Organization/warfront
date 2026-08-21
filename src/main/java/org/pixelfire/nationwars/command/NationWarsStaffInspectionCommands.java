@@ -18,6 +18,7 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.server.permission.PermissionAPI;
 import org.pixelfire.nationwars.NationWarsMod;
 import org.pixelfire.nationwars.activity.PlayerActivityState;
+import org.pixelfire.nationwars.compute.TickTimer;
 import org.pixelfire.nationwars.config.NationWarsConfig;
 import org.pixelfire.nationwars.state.EvasionKey;
 import org.pixelfire.nationwars.state.EvasionTracker;
@@ -135,18 +136,29 @@ public final class NationWarsStaffInspectionCommands
     }
 
     /**
-     * Reports queue depth for the two off-main-thread systems that actually expose one. Per-system
-     * main-thread timing (average/p99) isn't instrumented anywhere yet — no call site records how long
-     * its own work took — so this doesn't claim numbers nobody measured.
+     * Reports queue depth for the two off-main-thread systems, plus average and worst-in-window
+     * main-thread cost for the four tick listeners that do the bulk of the mod's per-tick work —
+     * {@code /nationwars staff perf}'s pass/fail signal for the spec's tick budget.
      */
     private static int perf(final CommandContext<CommandSourceStack> context)
     {
         final int workerQueueDepth = NationWarsMod.get().getWorkerPool().queueDepth();
         final int writerQueueDepth = NationWarsMod.get().getWriterThread().queueDepth();
         context.getSource().sendSuccess(() -> Component.literal("worker queue depth=" + workerQueueDepth
-                + ", audit/IO writer queue depth=" + writerQueueDepth
-                + " (per-system main-thread timing is not instrumented yet)"), false);
+                + ", audit/IO writer queue depth=" + writerQueueDepth), false);
+
+        reportTimer(context, "capture", NationWarsMod.get().getCaptureTickListener().perfTimer());
+        reportTimer(context, "warLifecycle", NationWarsMod.get().getWarLifecycleListener().perfTimer());
+        reportTimer(context, "evasion", NationWarsMod.get().getEvasionTickListener().perfTimer());
+        reportTimer(context, "validationSweep", NationWarsMod.get().getValidationSweepListener().perfTimer());
         return 1;
+    }
+
+    private static void reportTimer(final CommandContext<CommandSourceStack> context, final String name, final TickTimer timer)
+    {
+        final var snapshot = timer.snapshot();
+        context.getSource().sendSuccess(() -> Component.literal(name + ": avg=" + String.format("%.3f", snapshot.averageMs())
+                + "ms, worstInWindow=" + snapshot.worstInWindowMs() + "ms, samples=" + snapshot.sampleCount()), false);
     }
 
     /**
