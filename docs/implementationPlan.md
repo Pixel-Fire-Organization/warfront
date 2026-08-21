@@ -99,7 +99,7 @@ these blocks are inert placeholders (§21.13: a block entity with no matching ci
 (pickaxe, creative, TNT, piston) in a manual test pass; checkpoint breaks like a normal block since no city owns it
 yet.
 
-## Stage 8 — Sky column rule and OPAC protection-override probe (§7, §16.4, §24 M2)
+## Stage 8 — Sky column rule (§7, §24 M2)
 
 Implement the sky-column definition, dimension eligibility, and surface-requirement checks (§7.1–7.3) with the
 section-shortcut scan (§4.5 step 1) on the main thread and the snapshot-and-analyze off-thread path (§4.5 step 2)
@@ -107,14 +107,12 @@ for partially filled sections. Implement column protection (§7.4 prevention: ca
 falling-block entry inside a column) keyed by an O(1) `Map<ChunkPos, List<ColumnRef>>`, even though no columns are
 registered yet.
 
-Run the OPAC protection-override probe called out as the milestone gate in §24 M2 and flagged as the top open
-question in §23.1: verify empirically against the target OPAC build whether its protection is expressed as
-cancellable Forge events (§16.4 implementation) or needs the mixin/journal fallback. Record the finding — this
-decides the shape of Stage 15.
+**Deferred to just before Stage 15:** the OPAC protection-override probe (empirically checking whether OPAC exposes
+claim protection as cancellable Forge events, per §16.4 and the open question in §23.1) is exploratory work whose
+finding only matters once the war-protection-override implementation actually needs it. Run it then rather than
+here, so it isn't stale by the time Stage 15 starts.
 
-**Done when:** a clear column measures as clear and an obstructed one is detected, both verified in a manual test;
-the protection-override probe's finding (event-cancellation confirmed or fallback required) is written down before
-any later stage depends on it.
+**Done when:** a clear column measures as clear and an obstructed one is detected, both verified in a manual test.
 
 ## Stage 9 — Founding a city (§8, §24 M2)
 
@@ -198,12 +196,13 @@ window; breaking the alliance mid-war does not remove the ally from the coalitio
 
 ## Stage 15 — War protection override (§16.4, §24 M7 part 1)
 
-Using the Stage 8 probe finding, implement `allowed(player, pos, action)` as the pure derived function specified in
-§16.4 — never stored, evaluated per event at `EventPriority.LOWEST` with `receiveCanceled = true`, un-cancelling
-OPAC's own cancellation when war-sanctioned. If the probe found OPAC does not expose all relevant actions as
-cancellable events, implement the override-journal fallback described in the same section instead, scoped
-identically (time/space/people/action per the §16.4 scope table) and wired to the `warProtectionOverride` config
-list from Stage 1.
+Run the OPAC protection-override probe first (deferred here from Stage 8): verify empirically against the target
+OPAC build whether its protection is expressed as cancellable Forge events. Using that finding, implement
+`allowed(player, pos, action)` as the pure derived function specified in §16.4 — never stored, evaluated per event at
+`EventPriority.LOWEST` with `receiveCanceled = true`, un-cancelling OPAC's own cancellation when war-sanctioned. If
+the probe found OPAC does not expose all relevant actions as cancellable events, implement the override-journal
+fallback described in the same section instead, scoped identically (time/space/people/action per the §16.4 scope
+table) and wired to the `warProtectionOverride` config list from Stage 1.
 
 This must land before Stage 16 (capture), since capture inside claimed territory is unplayable without it, matching
 the milestone note in §24 M7 that both land together.

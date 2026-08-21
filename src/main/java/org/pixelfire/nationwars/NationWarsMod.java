@@ -34,6 +34,8 @@ import org.pixelfire.nationwars.io.audit.AuditSource;
 import org.pixelfire.nationwars.io.audit.AuditWriter;
 import org.pixelfire.nationwars.state.NationRegistry;
 import org.pixelfire.nationwars.state.PeaceClause;
+import org.pixelfire.nationwars.world.ColumnProtectionListener;
+import org.pixelfire.nationwars.world.ColumnRegistry;
 import org.pixelfire.nationwars.world.OpacIntegration;
 import org.pixelfire.nationwars.world.block.NationWarsBlockEntities;
 import org.pixelfire.nationwars.world.block.NationWarsBlocks;
@@ -74,6 +76,8 @@ public class NationWarsMod
     private AuditWriter auditWriter;
     private AuditIndex auditIndex;
     private Path auditDir;
+    private ColumnRegistry columnRegistry;
+    private ColumnProtectionListener columnProtectionListener;
 
     // Forge only ever constructs one instance of a mod's main class; command handlers (which have no
     // other way to reach this instance) resolve it through here.
@@ -151,6 +155,10 @@ public class NationWarsMod
         workerPool = new WorkerPool(workerThreads, workerQueueCapacity);
         writerThread = new WriterThread(WRITER_QUEUE_CAPACITY);
 
+        columnRegistry = new ColumnRegistry();
+        columnProtectionListener = new ColumnProtectionListener(columnRegistry);
+        MinecraftForge.EVENT_BUS.register(columnProtectionListener);
+
         auditDir = event.getServer().getWorldPath(LevelResource.ROOT).resolve("data").resolve("nationwars-audit");
         auditWriter = new AuditWriter(auditDir, writerThread);
         auditIndex = new AuditIndex();
@@ -177,6 +185,12 @@ public class NationWarsMod
         auditWriter = null;
         auditIndex = null;
         auditDir = null;
+        if (columnProtectionListener != null)
+        {
+            MinecraftForge.EVENT_BUS.unregister(columnProtectionListener);
+            columnProtectionListener = null;
+        }
+        columnRegistry = null;
         if (writerThread != null)
         {
             writerThread.close();
@@ -213,5 +227,10 @@ public class NationWarsMod
     public WorkerPool getWorkerPool()
     {
         return workerPool;
+    }
+
+    public ColumnRegistry getColumnRegistry()
+    {
+        return columnRegistry;
     }
 }
