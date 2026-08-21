@@ -32,6 +32,11 @@ import org.pixelfire.nationwars.io.audit.AuditEntry;
 import org.pixelfire.nationwars.io.audit.AuditIndex;
 import org.pixelfire.nationwars.io.audit.AuditSource;
 import org.pixelfire.nationwars.io.audit.AuditWriter;
+import org.pixelfire.nationwars.activity.ActivityEventListener;
+import org.pixelfire.nationwars.activity.ActivityTracker;
+import org.pixelfire.nationwars.activity.CombatLogListener;
+import org.pixelfire.nationwars.activity.CombatTagTracker;
+import org.pixelfire.nationwars.activity.LoginShieldListener;
 import org.pixelfire.nationwars.state.NationRegistry;
 import org.pixelfire.nationwars.state.PeaceClause;
 import org.pixelfire.nationwars.world.CheckpointBreakListener;
@@ -88,6 +93,12 @@ public class NationWarsMod
     private CheckpointPlacementListener checkpointPlacementListener;
     private CheckpointBreakListener checkpointBreakListener;
     private CityDormancyListener cityDormancyListener;
+    private ActivityTracker activityTracker;
+    private CombatTagTracker combatTagTracker;
+    private ActivityEventListener activityEventListener;
+    private CombatLogListener combatLogListener;
+    private LoginShieldListener loginShieldListener;
+    private volatile boolean serverStopping;
 
     // Forge only ever constructs one instance of a mod's main class; command handlers (which have no
     // other way to reach this instance) resolve it through here.
@@ -181,6 +192,16 @@ public class NationWarsMod
         cityDormancyListener = new CityDormancyListener();
         MinecraftForge.EVENT_BUS.register(cityDormancyListener);
 
+        serverStopping = false;
+        activityTracker = new ActivityTracker();
+        combatTagTracker = new CombatTagTracker();
+        activityEventListener = new ActivityEventListener(activityTracker);
+        MinecraftForge.EVENT_BUS.register(activityEventListener);
+        combatLogListener = new CombatLogListener(combatTagTracker);
+        MinecraftForge.EVENT_BUS.register(combatLogListener);
+        loginShieldListener = new LoginShieldListener(activityTracker);
+        MinecraftForge.EVENT_BUS.register(loginShieldListener);
+
         auditDir = event.getServer().getWorldPath(LevelResource.ROOT).resolve("data").resolve("nationwars-audit");
         auditWriter = new AuditWriter(auditDir, writerThread);
         auditIndex = new AuditIndex();
@@ -202,6 +223,10 @@ public class NationWarsMod
     @SubscribeEvent
     public void onServerStopping(final ServerStoppingEvent event)
     {
+        // Set first: ServerStoppingEvent fires before players are kicked, so CombatLogListener's
+        // logout handler can already see this when combatLogGraceOnServerStop applies.
+        serverStopping = true;
+
         // AuditWriter has nothing to flush at shutdown: every append() already fully writes and
         // closes its day file synchronously on the writer thread by the time it returns.
         auditWriter = null;
@@ -232,6 +257,23 @@ public class NationWarsMod
             MinecraftForge.EVENT_BUS.unregister(cityDormancyListener);
             cityDormancyListener = null;
         }
+        if (activityEventListener != null)
+        {
+            MinecraftForge.EVENT_BUS.unregister(activityEventListener);
+            activityEventListener = null;
+        }
+        if (combatLogListener != null)
+        {
+            MinecraftForge.EVENT_BUS.unregister(combatLogListener);
+            combatLogListener = null;
+        }
+        if (loginShieldListener != null)
+        {
+            MinecraftForge.EVENT_BUS.unregister(loginShieldListener);
+            loginShieldListener = null;
+        }
+        activityTracker = null;
+        combatTagTracker = null;
         columnRegistry = null;
         if (writerThread != null)
         {
@@ -279,5 +321,20 @@ public class NationWarsMod
     public NationRegistry getNationRegistry()
     {
         return nationRegistry;
+    }
+
+    public ActivityTracker getActivityTracker()
+    {
+        return activityTracker;
+    }
+
+    public CombatTagTracker getCombatTagTracker()
+    {
+        return combatTagTracker;
+    }
+
+    public boolean isServerStopping()
+    {
+        return serverStopping;
     }
 }
