@@ -11,6 +11,10 @@ import java.util.UUID;
  * @param contestedTimeMs        reserved for capture bookkeeping (Stage 16); unused until then
  * @param settlementDeadline     0 if the backstop is disabled
  * @param outcome                {@code null} until the war reaches a terminal outcome
+ * @param memberTargetableAt     a cascaded ally's own {@code PREPARATION} deadline, keyed by nation id;
+ *                               absent for the two primaries and anyone already past it — not part of
+ *                               the original data model, added because a pending member's private prep
+ *                               window can't be timed without it
  *
  *                               <p>{@code stagedSettlement}/{@code appliedSettlement} from the data model
  *                               aren't representable yet — there is no {@code PeaceSettlement} type until
@@ -31,6 +35,7 @@ public record War(
         long suspendedSince,
         long contestedTimeMs,
         long settlementDeadline,
-        WarOutcome outcome)
+        WarOutcome outcome,
+        Map<UUID, Long> memberTargetableAt)
 {
 }

@@ -81,6 +81,7 @@ class NationRegistryTest
     {
         final Coalition attackers = Coalition.ofPrimary(UUID.randomUUID());
         final Coalition defenders = Coalition.ofPrimary(UUID.randomUUID());
-        return new War(warId, attackers, defenders, WarPhase.PREPARATION, 0L, 0L, 0L, Set.of(), Set.of(), Map.of(), 0L, 0L, 0L, null);
+        return new War(warId, attackers, defenders, WarPhase.PREPARATION, 0L, 0L, 0L, Set.of(), Set.of(), Map.of(),
+                0L, 0L, 0L, null, Map.of());
     }
 }

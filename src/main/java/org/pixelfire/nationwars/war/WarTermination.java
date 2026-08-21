@@ -46,7 +46,8 @@ public final class WarTermination
         {
             registry.wars().put(war.warId(), new War(war.warId(), war.attackers(), war.defenders(), targetPhase,
                     war.declaredAt(), war.activeAt(), war.warExpiresAt(), war.targetCityIds(), war.occupiedCityIds(),
-                    war.warScore(), war.suspendedSince(), war.contestedTimeMs(), war.settlementDeadline(), outcome));
+                    war.warScore(), war.suspendedSince(), war.contestedTimeMs(), war.settlementDeadline(), outcome,
+                    war.memberTargetableAt()));
 
             if (whitePeace)
             {

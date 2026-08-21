@@ -16,8 +16,10 @@ import org.pixelfire.nationwars.config.NationWarsConfig;
 import org.pixelfire.nationwars.state.NationRegistry;
 import org.pixelfire.nationwars.state.War;
 import org.pixelfire.nationwars.state.WarDeclarationFailureReason;
+import org.pixelfire.nationwars.state.WarJoinFailureReason;
 import org.pixelfire.nationwars.state.WarOutcome;
 import org.pixelfire.nationwars.war.WarDeclarationService;
+import org.pixelfire.nationwars.war.WarJoinService;
 import org.pixelfire.nationwars.war.WarTermination;
 import org.pixelfire.nationwars.world.OpacNations;
 import org.pixelfire.nationwars.world.OpacNations.NationSnapshot;
@@ -46,6 +48,10 @@ public final class NationWarsWarCommands
                 .then(Commands.literal("withdraw")
                         .then(Commands.argument("warId", UuidArgument.uuid())
                                 .executes(NationWarsWarCommands::withdraw)))
+                .then(Commands.literal("join")
+                        .then(Commands.argument("warId", UuidArgument.uuid())
+                                .then(Commands.literal("attackers")
+                                        .executes(NationWarsWarCommands::join))))
                 .then(Commands.literal("status")
                         .executes(NationWarsWarCommands::statusList)
                         .then(Commands.argument("warId", UuidArgument.uuid())
@@ -112,6 +118,26 @@ public final class NationWarsWarCommands
         }
         WarTermination.conclude(registry, war, WarOutcome.ATTACKER_WITHDRAWAL, System.currentTimeMillis());
         context.getSource().sendSuccess(() -> Component.literal("Withdrew from the war."), true);
+        return 1;
+    }
+
+    private static int join(final CommandContext<CommandSourceStack> context)
+    {
+        final ServerPlayer player = context.getSource().getPlayer();
+        final UUID warId = UuidArgument.getUuid(context, "warId");
+        final War war = NationWarsMod.get().getNationRegistry().wars().get(warId);
+        if (player == null || war == null)
+        {
+            context.getSource().sendFailure(Component.literal("No such war."));
+            return 0;
+        }
+        final Optional<WarJoinFailureReason> failure = WarJoinService.join(context.getSource().getServer(), player, war);
+        if (failure.isPresent())
+        {
+            context.getSource().sendFailure(Component.literal(failure.get().message()));
+            return 0;
+        }
+        context.getSource().sendSuccess(() -> Component.literal("Joined the war as an attacker."), true);
         return 1;
     }
 

@@ -12,6 +12,7 @@ import xaero.pac.common.server.api.OpenPACServerAPI;
 
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Thin wrapper over the OPAC server API for the lookups founding/checkpoint placement need: a player's
@@ -82,6 +83,24 @@ public final class OpacNations
     public static boolean nationExists(final MinecraftServer server, final UUID nationId)
     {
         return OpenPACServerAPI.get(server).getPartyManager().getPartyById(nationId) != null;
+    }
+
+    /**
+     * Every nation mutually allied with {@code nationId}. Used to cascade coalition assembly at
+     * declaration time.
+     */
+    public static Set<UUID> mutualAlliesOf(final MinecraftServer server, final UUID nationId)
+    {
+        final var partyManager = OpenPACServerAPI.get(server).getPartyManager();
+        final var party = partyManager.getPartyById(nationId);
+        if (party == null)
+        {
+            return Set.of();
+        }
+        return party.getAllyPartiesStream()
+                .map(ally -> ally.getPartyId())
+                .filter(allyId -> areAllies(server, nationId, allyId))
+                .collect(Collectors.toUnmodifiableSet());
     }
 
     /**

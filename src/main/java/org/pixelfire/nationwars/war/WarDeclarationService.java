@@ -153,20 +153,30 @@ public final class WarDeclarationService
     {
         final UUID warId = UUID.randomUUID();
         final long warExpiresAt = now + NationWarsConfig.WAR_DURATION_SECONDS.get() * 1000L;
-        final Set<UUID> targetCityIds = citiesOf(registry, targetId).stream()
+
+        final Coalition defenders = CoalitionAssembly.assembleDefenders(server, targetId, now);
+        final Coalition attackers = Coalition.ofPrimary(declarerId);
+
+        final Set<UUID> targetCityIds = defenders.members().stream()
+                .flatMap(nationId -> citiesOf(registry, nationId).stream())
                 .filter(city -> city.state() != CityState.DORMANT)
                 .map(City::cityId)
                 .collect(Collectors.toUnmodifiableSet());
 
-        final War war = new War(warId, Coalition.ofPrimary(declarerId), Coalition.ofPrimary(targetId), WarPhase.PREPARATION,
-                now, 0L, warExpiresAt, targetCityIds, Set.of(), Map.of(), 0L, 0L, 0L, null);
+        final War war = new War(warId, attackers, defenders, WarPhase.PREPARATION,
+                now, 0L, warExpiresAt, targetCityIds, Set.of(), Map.of(), 0L, 0L, 0L, null, Map.of());
+
+        final Set<UUID> allMembers = new HashSet<>(defenders.members());
+        allMembers.add(declarerId);
 
         registry.stripedLocks().withLocks(() ->
         {
             registry.wars().put(warId, war);
-            addActiveWar(registry, declarerId, warId);
-            addActiveWar(registry, targetId, warId);
-        }, declarerId, targetId);
+            for (final UUID nationId : allMembers)
+            {
+                addActiveWar(registry, nationId, warId);
+            }
+        }, allMembers.toArray(UUID[]::new));
 
         final CompoundTag after = new CompoundTag();
         after.putUUID("warId", warId);
