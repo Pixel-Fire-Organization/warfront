@@ -6,6 +6,7 @@ import net.minecraft.world.level.Level;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -50,8 +51,8 @@ class NationRegistryTest
     {
         final NationRegistry registry = new NationRegistry(4);
         final UUID warId = UUID.randomUUID();
-        final War original = new War(warId);
-        final War replacement = new War(warId);
+        final War original = newWar(warId);
+        final War replacement = newWar(warId);
 
         registry.wars().put(warId, original);
         registry.wars().put(warId, replacement);
@@ -74,5 +75,12 @@ class NationRegistryTest
         final ResourceKey<Level> dimension = Mockito.mock(ResourceKey.class);
         return new City(cityId, "Testville", UUID.randomUUID(), UUID.randomUUID(), dimension, BlockPos.ZERO,
                 0, 0L, Set.of(), CityState.ACTIVE, null, 0L, 0L, 0L, 0L, 0, 0L, 0L);
+    }
+
+    private static War newWar(final UUID warId)
+    {
+        final Coalition attackers = Coalition.ofPrimary(UUID.randomUUID());
+        final Coalition defenders = Coalition.ofPrimary(UUID.randomUUID());
+        return new War(warId, attackers, defenders, WarPhase.PREPARATION, 0L, 0L, 0L, Set.of(), Set.of(), Map.of(), 0L, 0L, 0L, null);
     }
 }

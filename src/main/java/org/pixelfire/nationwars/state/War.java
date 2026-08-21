@@ -1,12 +1,36 @@
 package org.pixelfire.nationwars.state;
 
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
- * Placeholder war record: only the id needed to key it in {@link NationRegistry}. The full field set
- * (coalitions, phase, deadlines, targeted cities, war score, and so on) lands when war declaration is
- * implemented.
+ * @param declaredAt, activeAt   {@code activeAt} is 0 until the war first reaches {@code ACTIVE}
+ * @param warExpiresAt           wall-clock deadline; never pauses, including through {@code SUSPENDED}
+ * @param suspendedSince         0 unless currently {@code SUSPENDED}
+ * @param contestedTimeMs        reserved for capture bookkeeping (Stage 16); unused until then
+ * @param settlementDeadline     0 if the backstop is disabled
+ * @param outcome                {@code null} until the war reaches a terminal outcome
+ *
+ *                               <p>{@code stagedSettlement}/{@code appliedSettlement} from the data model
+ *                               aren't representable yet — there is no {@code PeaceSettlement} type until
+ *                               settlement is implemented — and are added then rather than typed as
+ *                               {@code Object} in the meantime.
  */
-public record War(UUID warId)
+public record War(
+        UUID warId,
+        Coalition attackers,
+        Coalition defenders,
+        WarPhase phase,
+        long declaredAt,
+        long activeAt,
+        long warExpiresAt,
+        Set<UUID> targetCityIds,
+        Set<UUID> occupiedCityIds,
+        Map<UUID, Long> warScore,
+        long suspendedSince,
+        long contestedTimeMs,
+        long settlementDeadline,
+        WarOutcome outcome)
 {
 }

@@ -79,6 +79,23 @@ public final class OpacNations
         return party == null ? null : party.getOwner().getUUID();
     }
 
+    public static boolean nationExists(final MinecraftServer server, final UUID nationId)
+    {
+        return OpenPACServerAPI.get(server).getPartyManager().getPartyById(nationId) != null;
+    }
+
+    /**
+     * Finds a nation by its party default name, case-insensitively. Players know their nation by name,
+     * not by OPAC party UUID.
+     */
+    public static UUID findNationByName(final MinecraftServer server, final String name)
+    {
+        return OpenPACServerAPI.get(server).getPartyManager().getAllStream()
+                .filter(party -> party.getDefaultName().equalsIgnoreCase(name))
+                .map(party -> party.getId())
+                .findFirst().orElse(null);
+    }
+
     /**
      * True if the chunk at {@code pos} is claimed by a player who isn't a member of {@code nationId} —
      * including a claim whose owner no longer belongs to any party, treated conservatively as someone
