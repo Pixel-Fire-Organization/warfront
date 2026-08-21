@@ -125,7 +125,7 @@ public final class CityFoundingListener
                         server, level.dimension().location(), pos, nation.nationId()),
                 nationState != null && nationState.lockedByWarId() != null,
                 nationState != null && !nationState.activeWarIds().isEmpty(),
-                false);
+                NationWarsConfig.ALLOW_FOUNDING_DURING_WAR.get());
     }
 
     private void foundCity(final MinecraftServer server, final ServerLevel level, final BlockPos pos,

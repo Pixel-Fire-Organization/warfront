@@ -44,6 +44,7 @@ public final class NationWarsConfig
     public static final ForgeConfigSpec.DoubleValue MIN_CORE_CLEARANCE;
     public static final ForgeConfigSpec.IntValue CHECKPOINT_MOVE_GRACE_SECONDS;
     public static final ForgeConfigSpec.IntValue CHECKPOINT_RESPAWN_DELAY_SECONDS;
+    public static final ForgeConfigSpec.BooleanValue ALLOW_FOUNDING_DURING_WAR;
 
     // ---- Tiers and payment --------------------------------------------------------------------
 
@@ -57,6 +58,7 @@ public final class NationWarsConfig
     public static final ForgeConfigSpec.ConfigValue<String> CHECKPOINT_PLACE_RANK;
     public static final ForgeConfigSpec.ConfigValue<String> CITY_UPGRADE_RANK;
     public static final ForgeConfigSpec.BooleanValue ALLIES_CAN_PLACE_CHECKPOINTS;
+    public static final ForgeConfigSpec.BooleanValue ALLOW_UPGRADE_DURING_WAR;
     public static final ForgeConfigSpec.IntValue STAFF_PERMISSION_LEVEL;
 
     // ---- Capture --------------------------------------------------------------------------------
@@ -200,6 +202,9 @@ public final class NationWarsConfig
         CHECKPOINT_RESPAWN_DELAY_SECONDS = BUILDER.comment(
                         "How long, in seconds, a checkpoint stays shattered before its cosmetic break/capture respawn effect finishes.")
                 .defineInRange("checkpointRespawnDelay", 3, 0, Integer.MAX_VALUE);
+        ALLOW_FOUNDING_DURING_WAR = BUILDER.comment(
+                        "If false, a nation currently in an unsettled war cannot found a new city.")
+                .define("allowFoundingDuringWar", false);
         BUILDER.pop();
 
         BUILDER.push("tiers");
@@ -234,6 +239,9 @@ public final class NationWarsConfig
                 .define("cityUpgradeRank", "MODERATOR");
         ALLIES_CAN_PLACE_CHECKPOINTS = BUILDER.comment("If true, members of an allied nation may also place checkpoints for a city, not just its own citizens.")
                 .define("alliesCanPlaceCheckpoints", false);
+        ALLOW_UPGRADE_DURING_WAR = BUILDER.comment(
+                        "If false, a nation currently in an unsettled war cannot confirm a tier upgrade.")
+                .define("allowUpgradeDuringWar", false);
         STAFF_PERMISSION_LEVEL = BUILDER.comment(
                         "Vanilla operator level that counts as staff when no permission mod is installed to resolve the "
                                 + "nationwars.staff.* permission nodes.")

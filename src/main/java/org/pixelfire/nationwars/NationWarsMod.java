@@ -44,6 +44,7 @@ import org.pixelfire.nationwars.world.ColumnRegistry;
 import org.pixelfire.nationwars.world.OpacIntegration;
 import org.pixelfire.nationwars.world.block.NationWarsBlockEntities;
 import org.pixelfire.nationwars.world.block.NationWarsBlocks;
+import org.pixelfire.nationwars.world.block.NationWarsMenus;
 import org.slf4j.Logger;
 
 import java.nio.file.Path;
@@ -102,6 +103,7 @@ public class NationWarsMod
 
         NationWarsBlocks.bootstrap();
         NationWarsBlockEntities.bootstrap();
+        NationWarsMenus.bootstrap();
 
         BLOCKS.register(modEventBus);
         ITEMS.register(modEventBus);
