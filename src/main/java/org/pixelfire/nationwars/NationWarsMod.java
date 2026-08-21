@@ -51,6 +51,7 @@ import org.pixelfire.nationwars.world.OpacIntegration;
 import org.pixelfire.nationwars.world.block.NationWarsBlockEntities;
 import org.pixelfire.nationwars.world.block.NationWarsBlocks;
 import org.pixelfire.nationwars.world.block.NationWarsMenus;
+import org.pixelfire.nationwars.settlement.NationWarsPeaceClauses;
 import org.pixelfire.nationwars.war.WarLifecycleListener;
 import org.pixelfire.nationwars.war.WarProtectionListener;
 import org.slf4j.Logger;
@@ -121,6 +122,7 @@ public class NationWarsMod
         NationWarsBlocks.bootstrap();
         NationWarsBlockEntities.bootstrap();
         NationWarsMenus.bootstrap();
+        NationWarsPeaceClauses.bootstrap();
 
         BLOCKS.register(modEventBus);
         ITEMS.register(modEventBus);

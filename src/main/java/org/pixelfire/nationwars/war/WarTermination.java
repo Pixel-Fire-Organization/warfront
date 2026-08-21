@@ -7,6 +7,7 @@ import org.pixelfire.nationwars.config.NationWarsConfig;
 import org.pixelfire.nationwars.io.audit.ActorRole;
 import org.pixelfire.nationwars.io.audit.AuditEntry;
 import org.pixelfire.nationwars.io.audit.AuditSource;
+import org.pixelfire.nationwars.state.City;
 import org.pixelfire.nationwars.state.NationRegistry;
 import org.pixelfire.nationwars.state.NationState;
 import org.pixelfire.nationwars.state.War;
@@ -25,9 +26,10 @@ import java.util.stream.Stream;
 /**
  * Shared conclusion logic for every termination trigger that doesn't need the settlement pipeline
  * (timeout, withdrawal, disbandment-void, staff cancel). The white-peace rule — a war reaching
- * settlement with nothing occupied closes immediately, no lock, no negotiation — is what every one of
- * these currently hits, since no capture exists yet to ever populate {@code occupiedCityIds}. The
- * {@code SETTLEMENT} branch is real code, just not yet reachable in practice.
+ * settlement with nothing occupied closes immediately, no lock, no negotiation — is exactly the "every
+ * targeted city was successfully held" case, so that's also where the war-score bonus for holding a city
+ * to the war's end is awarded. Any war ending with an occupation still standing locks into
+ * {@code SETTLEMENT} instead, resolved by {@link org.pixelfire.nationwars.settlement.SettlementApplier}.
  */
 public final class WarTermination
 {
@@ -44,10 +46,24 @@ public final class WarTermination
 
         registry.stripedLocks().withLocks(() ->
         {
-            registry.wars().put(war.warId(), new War(war.warId(), war.attackers(), war.defenders(), targetPhase,
-                    war.declaredAt(), war.activeAt(), war.warExpiresAt(), war.targetCityIds(), war.occupiedCityIds(),
-                    war.warScore(), war.suspendedSince(), war.contestedTimeMs(), war.settlementDeadline(), outcome,
-                    war.memberTargetableAt()));
+            War scored = war;
+            if (whitePeace)
+            {
+                // occupiedCityIds is empty, i.e. every targeted city was held the whole war.
+                for (final UUID cityId : war.targetCityIds())
+                {
+                    final City city = registry.cities().get(cityId);
+                    if (city != null)
+                    {
+                        scored = WarScore.applyAward(scored, city.ownerNationId(), NationWarsConfig.SCORE_CITY_HELD.get());
+                    }
+                }
+            }
+
+            registry.wars().put(war.warId(), new War(scored.warId(), scored.attackers(), scored.defenders(), targetPhase,
+                    scored.declaredAt(), scored.activeAt(), scored.warExpiresAt(), scored.targetCityIds(), scored.occupiedCityIds(),
+                    scored.warScore(), scored.suspendedSince(), scored.contestedTimeMs(), scored.settlementDeadline(), outcome,
+                    scored.memberTargetableAt()));
 
             if (whitePeace)
             {

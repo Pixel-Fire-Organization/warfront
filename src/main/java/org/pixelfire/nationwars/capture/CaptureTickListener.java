@@ -22,8 +22,10 @@ import org.pixelfire.nationwars.state.City;
 import org.pixelfire.nationwars.state.CityState;
 import org.pixelfire.nationwars.state.NationRegistry;
 import org.pixelfire.nationwars.state.War;
+import org.pixelfire.nationwars.state.WarOutcome;
 import org.pixelfire.nationwars.state.WarPhase;
 import org.pixelfire.nationwars.war.WarScore;
+import org.pixelfire.nationwars.war.WarTermination;
 import org.pixelfire.nationwars.world.OpacNations;
 
 import java.util.ArrayList;
@@ -79,6 +81,7 @@ public final class CaptureTickListener
             {
                 evaluateCity(server, registry, war, cityId, now, currentTick, dtSeconds);
             }
+            checkTotalVictory(registry, war, now);
         }
 
         updateSiegeState(registry);
@@ -103,6 +106,21 @@ public final class CaptureTickListener
         }
 
         evaluateOccupation(registry, war, cityId, now);
+    }
+
+    /**
+     * All target cities occupied → {@code ATTACKER_TOTAL_VICTORY}, moving the war to {@code SETTLEMENT}.
+     * Re-fetches the war record since {@link #evaluateCity} may have just updated
+     * {@code occupiedCityIds} this same pass.
+     */
+    private void checkTotalVictory(final NationRegistry registry, final War war, final long now)
+    {
+        final War current = registry.wars().get(war.warId());
+        if (current == null || current.targetCityIds().isEmpty() || !current.occupiedCityIds().containsAll(current.targetCityIds()))
+        {
+            return;
+        }
+        WarTermination.conclude(registry, current, WarOutcome.ATTACKER_TOTAL_VICTORY, now);
     }
 
     private void evaluateCheckpoint(final MinecraftServer server, final NationRegistry registry, final War war,
@@ -306,7 +324,7 @@ public final class CaptureTickListener
         }
         else if (allHeldByOwnerSide && city.state() == CityState.OCCUPIED && now >= city.occupationLockUntil())
         {
-            releaseOccupation(registry, city);
+            releaseOccupation(registry, war, city);
         }
     }
 
@@ -351,11 +369,22 @@ public final class CaptureTickListener
                 new CompoundTag(), new CompoundTag(), false));
     }
 
-    private void releaseOccupation(final NationRegistry registry, final City city)
+    private void releaseOccupation(final NationRegistry registry, final War war, final City city)
     {
         registry.stripedLocks().withLocks(() ->
-                registry.cities().put(city.cityId(), withOccupation(city, CityState.UNDER_SIEGE, null, 0L, 0L, city.dormantSince())),
-                city.cityId());
+        {
+            registry.cities().put(city.cityId(), withOccupation(city, CityState.UNDER_SIEGE, null, 0L, 0L, city.dormantSince()));
+            final War current = registry.wars().get(war.warId());
+            if (current != null)
+            {
+                final Set<UUID> occupied = new HashSet<>(current.occupiedCityIds());
+                occupied.remove(city.cityId());
+                registry.wars().put(war.warId(), new War(current.warId(), current.attackers(), current.defenders(), current.phase(),
+                        current.declaredAt(), current.activeAt(), current.warExpiresAt(), current.targetCityIds(),
+                        Set.copyOf(occupied), current.warScore(), current.suspendedSince(), current.contestedTimeMs(),
+                        current.settlementDeadline(), current.outcome(), current.memberTargetableAt()));
+            }
+        }, city.cityId(), war.warId());
 
         for (final UUID checkpointId : city.checkpointIds())
         {
