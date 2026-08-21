@@ -61,10 +61,26 @@ public final class NegotiationService
         return signatories;
     }
 
-    public static Optional<String> send(final NationRegistry registry, final War war, final UUID proposingNationId,
-            final NegotiationDraftTracker drafts)
+    public static Optional<String> send(final MinecraftServer server, final NationRegistry registry, final War war,
+            final UUID proposingNationId, final NegotiationDraftTracker drafts)
     {
-        final List<StagedClause> clauses = drafts.get(war.warId(), proposingNationId);
+        final Optional<String> failure = send(server, registry, war, proposingNationId, drafts.get(war.warId(), proposingNationId));
+        if (failure.isEmpty())
+        {
+            drafts.clear(war.warId(), proposingNationId);
+        }
+        return failure;
+    }
+
+    /**
+     * The packet-native entry point ({@link org.pixelfire.nationwars.network.ProposeSettlementPacket}):
+     * the client already holds its whole draft, so there's no tracker to read from or clear here — the
+     * command fallback's {@link #send(MinecraftServer, NationRegistry, War, UUID, NegotiationDraftTracker)}
+     * overload delegates to this one.
+     */
+    public static Optional<String> send(final MinecraftServer server, final NationRegistry registry, final War war,
+            final UUID proposingNationId, final List<StagedClause> clauses)
+    {
         if (clauses.isEmpty())
         {
             return Optional.of("Your draft is empty — use /war negotiate offer|demand|ceasefire first.");
@@ -90,7 +106,7 @@ public final class NegotiationService
                 Map.copyOf(ratifications), carriedRejectionCount);
 
         registry.settlements().put(war.warId(), settlement);
-        drafts.clear(war.warId(), proposingNationId);
+        SettlementSync.sendOpenDeal(server, settlement);
         return Optional.empty();
     }
 
@@ -126,6 +142,7 @@ public final class NegotiationService
         if (!signed.fullyRatified())
         {
             registry.settlements().put(war.warId(), signed);
+            SettlementSync.sendProgress(server, signed);
             return Optional.empty();
         }
 
@@ -144,7 +161,8 @@ public final class NegotiationService
      * still needs to read its {@code rejectionCount} to carry the deadlock-tracking count forward into
      * whatever offer replaces it.
      */
-    public static Optional<String> reject(final NationRegistry registry, final War war, final UUID nationId)
+    public static Optional<String> reject(final MinecraftServer server, final NationRegistry registry, final War war,
+            final UUID nationId)
     {
         final PeaceSettlement settlement = registry.settlements().get(war.warId());
         if (settlement == null || settlement.anyRejected())
@@ -157,9 +175,11 @@ public final class NegotiationService
         }
         final Map<UUID, RatificationState> updated = new HashMap<>(settlement.ratifications());
         updated.put(nationId, RatificationState.REJECTED);
-        registry.settlements().put(war.warId(), new PeaceSettlement(settlement.settlementId(), settlement.warId(),
+        final PeaceSettlement rejected = new PeaceSettlement(settlement.settlementId(), settlement.warId(),
                 settlement.proposedByNationId(), settlement.clauses(), settlement.createdAt(), settlement.expiresAt(),
-                Map.copyOf(updated), settlement.rejectionCount() + 1));
+                Map.copyOf(updated), settlement.rejectionCount() + 1);
+        registry.settlements().put(war.warId(), rejected);
+        SettlementSync.sendProgress(server, rejected);
         return Optional.empty();
     }
 

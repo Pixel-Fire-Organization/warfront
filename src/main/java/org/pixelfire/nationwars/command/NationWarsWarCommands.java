@@ -21,6 +21,7 @@ import org.pixelfire.nationwars.state.War;
 import org.pixelfire.nationwars.state.WarDeclarationFailureReason;
 import org.pixelfire.nationwars.state.WarJoinFailureReason;
 import org.pixelfire.nationwars.state.WarOutcome;
+import org.pixelfire.nationwars.state.WarPhase;
 import org.pixelfire.nationwars.settlement.SurrenderService;
 import org.pixelfire.nationwars.war.CounterOffensiveService;
 import org.pixelfire.nationwars.war.WarDeclarationService;
@@ -338,7 +339,35 @@ public final class NationWarsWarCommands
             context.getSource().sendFailure(Component.literal("No such war."));
             return 0;
         }
-        context.getSource().sendSuccess(() -> Component.literal(describe(war)), false);
+
+        final boolean suspended = war.suspendedSince() > 0L;
+        final long now = System.currentTimeMillis();
+        final long remainingMs = Math.max(0L, war.warExpiresAt() - now);
+        context.getSource().sendSuccess(() -> Component.literal(describe(war) + (suspended ? " [SUSPENDED]" : " [ACTIVE]")
+                + " — deadline in " + (remainingMs / 86_400_000L) + "d " + ((remainingMs / 3_600_000L) % 24) + "h"), false);
+        context.getSource().sendSuccess(() -> Component.literal("  Target cities occupied: " + war.occupiedCityIds().size()
+                + "/" + war.targetCityIds().size()), false);
+        context.getSource().sendSuccess(() -> Component.literal("  Attackers (" + war.attackers().members().size() + "): "
+                + war.attackers().members()), false);
+        context.getSource().sendSuccess(() -> Component.literal("  Defenders (" + war.defenders().members().size() + "): "
+                + war.defenders().members()), false);
+        if (war.phase() == WarPhase.SETTLEMENT && war.settlementDeadline() > 0L)
+        {
+            final long settlementRemainingMs = Math.max(0L, war.settlementDeadline() - now);
+            context.getSource().sendSuccess(() -> Component.literal("  Settlement window: " + (settlementRemainingMs / 3_600_000L)
+                    + "h remaining — see /war negotiate " + war.warId() + " review"), false);
+        }
+
+        final ServerPlayer player = context.getSource().getPlayer();
+        if (player != null)
+        {
+            final NationSnapshot nation = OpacNations.nationOf(context.getSource().getServer(), player);
+            if (nation != null && war.warScore().containsKey(nation.nationId()))
+            {
+                context.getSource().sendSuccess(() -> Component.literal("  Your nation's war score: "
+                        + war.warScore().getOrDefault(nation.nationId(), 0L)), false);
+            }
+        }
         return 1;
     }
 

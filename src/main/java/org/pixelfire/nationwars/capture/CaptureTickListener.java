@@ -15,6 +15,9 @@ import org.pixelfire.nationwars.config.NationWarsConfig;
 import org.pixelfire.nationwars.io.audit.ActorRole;
 import org.pixelfire.nationwars.io.audit.AuditEntry;
 import org.pixelfire.nationwars.io.audit.AuditSource;
+import org.pixelfire.nationwars.network.CitySyncHelper;
+import org.pixelfire.nationwars.network.NationWarsNetwork;
+import org.pixelfire.nationwars.network.SyncCheckpointStatePacket;
 import org.pixelfire.nationwars.state.CaptureProgress;
 import org.pixelfire.nationwars.state.Checkpoint;
 import org.pixelfire.nationwars.state.CheckpointStatus;
@@ -47,6 +50,7 @@ public final class CaptureTickListener
     private final CaptureZoneTracker zoneTracker = new CaptureZoneTracker();
     private final CheckpointLockout lockout = new CheckpointLockout();
     private final CheckpointCosmeticEffect cosmeticEffect = new CheckpointCosmeticEffect();
+    private final CheckpointBossBarTracker bossBarTracker = new CheckpointBossBarTracker();
     private int tickCounter;
 
     @SubscribeEvent
@@ -105,7 +109,7 @@ public final class CaptureTickListener
             evaluateCheckpoint(server, registry, war, checkpointId, now, currentTick, dtSeconds);
         }
 
-        evaluateOccupation(registry, war, cityId, now);
+        evaluateOccupation(server, registry, war, cityId, now);
     }
 
     /**
@@ -129,6 +133,10 @@ public final class CaptureTickListener
         final Checkpoint checkpoint = registry.checkpoints().get(checkpointId);
         if (checkpoint == null || checkpoint.status() == CheckpointStatus.SEALED || checkpoint.status() == CheckpointStatus.FROZEN)
         {
+            if (checkpoint != null)
+            {
+                bossBarTracker.clear(checkpointId);
+            }
             return;
         }
         final ServerLevel level = server.getLevel(checkpoint.dimension());
@@ -147,6 +155,7 @@ public final class CaptureTickListener
 
         if (newProgress >= 1.0f)
         {
+            bossBarTracker.clear(checkpointId);
             flipCheckpoint(server, registry, war, checkpoint, currentTick);
         }
         else
@@ -154,6 +163,51 @@ public final class CaptureTickListener
             registry.checkpoints().put(checkpointId, new Checkpoint(checkpoint.checkpointId(), checkpoint.cityId(),
                     checkpoint.dimension(), checkpoint.pos(), checkpoint.holderNationId(), newProgress, checkpoint.capturingNationId(),
                     newStatus, checkpoint.claimedChunks(), now, checkpoint.placedBy(), checkpoint.placedAt()));
+            updateBossBar(registry, level, checkpoint, newStatus, newProgress);
+            sendCheckpointStateSync(server, checkpoint, newProgress, newStatus);
+        }
+    }
+
+    private void updateBossBar(final NationRegistry registry, final ServerLevel level, final Checkpoint checkpoint,
+            final CheckpointStatus status, final float progress)
+    {
+        if (status == CheckpointStatus.HELD)
+        {
+            bossBarTracker.clear(checkpoint.checkpointId());
+            return;
+        }
+        final City city = registry.cities().get(checkpoint.cityId());
+        final double radius = NationWarsConfig.CAPTURE_RADIUS.get();
+        final double height = NationWarsConfig.CAPTURE_ZONE_HEIGHT.get();
+        final BlockPos pos = checkpoint.pos();
+        final var box = new AABB(pos).inflate(radius, height, radius);
+        final Set<ServerPlayer> playersInZone = new HashSet<>(level.getEntitiesOfClass(ServerPlayer.class, box));
+        bossBarTracker.update(checkpoint.checkpointId(), city != null ? city.name() : "checkpoint", progress, playersInZone);
+    }
+
+    /**
+     * Every 10 ticks while contested, to clients within 128 blocks, per the packet's own cadence in the
+     * spec — a plain distance check against each online player rather than a spatial index, since this
+     * only runs for checkpoints already known to be contested (a small fraction of all checkpoints).
+     */
+    private void sendCheckpointStateSync(final MinecraftServer server, final Checkpoint checkpoint, final float progress,
+            final CheckpointStatus status)
+    {
+        if (status == CheckpointStatus.HELD)
+        {
+            return;
+        }
+        final var packet = SyncCheckpointStatePacket.of(new Checkpoint(checkpoint.checkpointId(),
+                checkpoint.cityId(), checkpoint.dimension(), checkpoint.pos(), checkpoint.holderNationId(), progress,
+                checkpoint.capturingNationId(), status, checkpoint.claimedChunks(), checkpoint.lastEvaluatedTime(),
+                checkpoint.placedBy(), checkpoint.placedAt()));
+        for (final ServerPlayer player : server.getPlayerList().getPlayers())
+        {
+            if (player.level().dimension().equals(checkpoint.dimension())
+                    && player.blockPosition().distSqr(checkpoint.pos()) <= 128.0 * 128.0)
+            {
+                NationWarsNetwork.sendTo(player, packet);
+            }
         }
     }
 
@@ -256,6 +310,11 @@ public final class CaptureTickListener
         NationWarsMod.get().getAuditWriter().append(AuditEntry.of(null, "SYSTEM", newHolder, ActorRole.SYSTEM, AuditSource.AUTO,
                 ResourceLocation.tryBuild(NationWarsMod.MODID, "checkpoint_captured"),
                 List.of(checkpoint.checkpointId(), checkpoint.cityId()), new CompoundTag(), after, false));
+
+        if (city != null)
+        {
+            CitySyncHelper.broadcast(server, registry, registry.cities().getOrDefault(city.cityId(), city));
+        }
     }
 
     /**
@@ -285,7 +344,8 @@ public final class CaptureTickListener
         return counts.entrySet().stream().max(Map.Entry.comparingByValue()).map(Map.Entry::getKey).orElse(null);
     }
 
-    private void evaluateOccupation(final NationRegistry registry, final War war, final UUID cityId, final long now)
+    private void evaluateOccupation(final MinecraftServer server, final NationRegistry registry, final War war, final UUID cityId,
+            final long now)
     {
         final City city = registry.cities().get(cityId);
         if (city == null)
@@ -320,15 +380,16 @@ public final class CaptureTickListener
         if (allHeldByHostiles && city.state() != CityState.OCCUPIED)
         {
             final UUID occupierPrimary = ownerIsDefender ? war.attackers().primaryNationId() : war.defenders().primaryNationId();
-            occupyCity(registry, war, city, occupierPrimary, now);
+            occupyCity(server, registry, war, city, occupierPrimary, now);
         }
         else if (allHeldByOwnerSide && city.state() == CityState.OCCUPIED && now >= city.occupationLockUntil())
         {
-            releaseOccupation(registry, war, city);
+            releaseOccupation(server, registry, war, city);
         }
     }
 
-    private void occupyCity(final NationRegistry registry, final War war, final City city, final UUID occupierPrimary, final long now)
+    private void occupyCity(final MinecraftServer server, final NationRegistry registry, final War war, final City city,
+            final UUID occupierPrimary, final long now)
     {
         final boolean firstTimeThisWar = !war.occupiedCityIds().contains(city.cityId());
         final long lockUntil = now + NationWarsConfig.OCCUPATION_LOCK_DURATION_SECONDS.get() * 1000L;
@@ -367,9 +428,11 @@ public final class CaptureTickListener
         NationWarsMod.get().getAuditWriter().append(AuditEntry.of(null, "SYSTEM", occupierPrimary, ActorRole.SYSTEM,
                 AuditSource.AUTO, ResourceLocation.tryBuild(NationWarsMod.MODID, "city_occupied"), List.of(city.cityId()),
                 new CompoundTag(), new CompoundTag(), false));
+
+        CitySyncHelper.broadcast(server, registry, registry.cities().get(city.cityId()));
     }
 
-    private void releaseOccupation(final NationRegistry registry, final War war, final City city)
+    private void releaseOccupation(final MinecraftServer server, final NationRegistry registry, final War war, final City city)
     {
         registry.stripedLocks().withLocks(() ->
         {
@@ -400,6 +463,8 @@ public final class CaptureTickListener
         NationWarsMod.get().getAuditWriter().append(AuditEntry.of(null, "SYSTEM", city.ownerNationId(), ActorRole.SYSTEM,
                 AuditSource.AUTO, ResourceLocation.tryBuild(NationWarsMod.MODID, "city_occupation_released"), List.of(city.cityId()),
                 new CompoundTag(), new CompoundTag(), false));
+
+        CitySyncHelper.broadcast(server, registry, registry.cities().get(city.cityId()));
     }
 
     /**

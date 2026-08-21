@@ -149,6 +149,8 @@ public final class NationWarsConfig
     public static final ForgeConfigSpec.IntValue AUDIT_REVERT_WINDOW_DAYS;
     public static final ForgeConfigSpec.IntValue NATION_VALIDATION_INTERVAL_SECONDS;
 
+    public static final ForgeConfigSpec.IntValue C2S_PACKET_RATE_LIMIT_MS;
+
     public static final ForgeConfigSpec SPEC;
 
     static
@@ -439,6 +441,13 @@ public final class NationWarsConfig
                         "How often, in seconds, the mod re-checks nation/city invariants (party still exists, claims match the "
                                 + "current leader, sky columns still clear, evasion clocks correct) and repairs anything wrong.")
                 .defineInRange("nationValidationInterval", 300, 1, Integer.MAX_VALUE);
+        BUILDER.pop();
+
+        BUILDER.push("networking");
+        C2S_PACKET_RATE_LIMIT_MS = BUILDER.comment(
+                        "Minimum milliseconds between accepted client-to-server packets of the same type from one player; "
+                                + "anything faster is dropped rather than re-validated and applied.")
+                .defineInRange("c2sPacketRateLimitMs", 250, 0, Integer.MAX_VALUE);
         BUILDER.pop();
 
         SPEC = BUILDER.build();

@@ -9,6 +9,8 @@ import net.minecraftforge.fml.LogicalSide;
 import org.pixelfire.nationwars.NationWarsMod;
 import org.pixelfire.nationwars.activity.Readiness;
 import org.pixelfire.nationwars.config.NationWarsConfig;
+import org.pixelfire.nationwars.network.NationWarsNetwork;
+import org.pixelfire.nationwars.network.SyncEvasionWarningPacket;
 import org.pixelfire.nationwars.state.Coalition;
 import org.pixelfire.nationwars.state.EvasionKey;
 import org.pixelfire.nationwars.state.EvasionProgress;
@@ -102,7 +104,7 @@ public final class EvasionTickListener
         registry.evasionTrackers().put(key, toStore);
         if (warningThreshold > 0)
         {
-            warnNation(server, nationId, warningThreshold, evasionLimitMs, toStore.evasionAccruedMs());
+            warnNation(server, war.warId(), nationId, warningThreshold, evasionLimitMs, toStore.evasionAccruedMs());
         }
     }
 
@@ -123,8 +125,8 @@ public final class EvasionTickListener
         return Readiness.isNationReady(server, nationId, tracker, currentTick, afkThresholdTicks);
     }
 
-    private void warnNation(final MinecraftServer server, final UUID nationId, final int thresholdPercent, final long evasionLimitMs,
-            final long evasionAccruedMs)
+    private void warnNation(final MinecraftServer server, final UUID warId, final UUID nationId, final int thresholdPercent,
+            final long evasionLimitMs, final long evasionAccruedMs)
     {
         final var party = OpenPACServerAPI.get(server).getPartyManager().getPartyById(nationId);
         if (party == null)
@@ -133,8 +135,13 @@ public final class EvasionTickListener
         }
         final long remainingMs = Math.max(0L, evasionLimitMs - evasionAccruedMs);
         final long remainingMinutes = remainingMs / 60_000L;
-        party.getOnlineMemberStream().forEach((ServerPlayer player) -> player.sendSystemMessage(Component.literal(
-                "Your nation is at " + thresholdPercent + "% of its evasion-surrender limit in an active war ("
-                        + remainingMinutes + " minutes remaining). Field an hour of active presence to clear the clock.")));
+        final var packet = SyncEvasionWarningPacket.of(warId, thresholdPercent, remainingMs);
+        party.getOnlineMemberStream().forEach((ServerPlayer player) ->
+        {
+            player.sendSystemMessage(Component.literal(
+                    "Your nation is at " + thresholdPercent + "% of its evasion-surrender limit in an active war ("
+                            + remainingMinutes + " minutes remaining). Field an hour of active presence to clear the clock."));
+            NationWarsNetwork.sendTo(player, packet);
+        });
     }
 }

@@ -51,6 +51,7 @@ public final class WarLifecycleListener
 {
     private final Map<UUID, Long> readinessFailingSince = new ConcurrentHashMap<>();
     private int tickCounter;
+    private int oneSecondCounter;
 
     @SubscribeEvent
     public void onServerTick(final TickEvent.ServerTickEvent event)
@@ -64,6 +65,7 @@ public final class WarLifecycleListener
             return;
         }
         tickCounter = 0;
+        oneSecondCounter++;
 
         final MinecraftServer server = event.getServer();
         final NationRegistry registry = NationWarsMod.get().getNationRegistry();
@@ -78,6 +80,15 @@ public final class WarLifecycleListener
             evaluatePendingEntries(server, registry, war, now);
             evaluateTargetability(registry, war, now);
             evaluatePhase(server, registry, war, now);
+
+            if (oneSecondCounter % 30 == 0)
+            {
+                WarStateSync.broadcastWarAndCoalitions(server, registry.wars().getOrDefault(war.warId(), war));
+            }
+            if (oneSecondCounter % 60 == 0)
+            {
+                WarStateSync.sendWarScores(server, registry.wars().getOrDefault(war.warId(), war));
+            }
         }
     }
 
@@ -108,7 +119,7 @@ public final class WarLifecycleListener
         {
             if (now >= current.declaredAt() + NationWarsConfig.WAR_PREP_DURATION_SECONDS.get() * 1000L)
             {
-                setPhase(registry, current, bothReady ? WarPhase.ACTIVE : WarPhase.SUSPENDED, now);
+                setPhase(server, registry, current, bothReady ? WarPhase.ACTIVE : WarPhase.SUSPENDED, now);
             }
             return;
         }
@@ -124,14 +135,14 @@ public final class WarLifecycleListener
             if (now - failingSince >= NationWarsConfig.PRESENCE_GRACE_DURATION_SECONDS.get() * 1000L)
             {
                 readinessFailingSince.remove(current.warId());
-                setPhase(registry, current, WarPhase.SUSPENDED, now);
+                setPhase(server, registry, current, WarPhase.SUSPENDED, now);
             }
             return;
         }
 
         if (current.phase() == WarPhase.SUSPENDED && bothReady)
         {
-            setPhase(registry, current, WarPhase.ACTIVE, now);
+            setPhase(server, registry, current, WarPhase.ACTIVE, now);
         }
     }
 
@@ -149,7 +160,8 @@ public final class WarLifecycleListener
                 .anyMatch(nationId -> Readiness.isNationReady(server, nationId, tracker, currentTick, afkThresholdTicks));
     }
 
-    private static void setPhase(final NationRegistry registry, final War war, final WarPhase phase, final long now)
+    private static void setPhase(final MinecraftServer server, final NationRegistry registry, final War war, final WarPhase phase,
+            final long now)
     {
         final long activeAt = phase == WarPhase.ACTIVE && war.activeAt() == 0L ? now : war.activeAt();
         final long suspendedSince = phase == WarPhase.SUSPENDED ? now : 0L;
@@ -157,6 +169,7 @@ public final class WarLifecycleListener
                 war.defenders(), phase, war.declaredAt(), activeAt, war.warExpiresAt(), war.targetCityIds(),
                 war.occupiedCityIds(), war.warScore(), suspendedSince, war.contestedTimeMs(), war.settlementDeadline(),
                 war.outcome(), war.memberTargetableAt())), war.warId());
+        WarStateSync.broadcastWarAndCoalitions(server, registry.wars().get(war.warId()));
     }
 
     private void evaluatePendingEntries(final MinecraftServer server, final NationRegistry registry, final War war, final long now)

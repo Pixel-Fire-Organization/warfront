@@ -192,8 +192,8 @@ public final class NationWarsNegotiationCommands
             return 0;
         }
         final Actor a = actor.get();
-        final Optional<String> failure = NegotiationService.send(NationWarsMod.get().getNationRegistry(), a.war(),
-                a.nation().nationId(), NationWarsMod.get().getNegotiationDraftTracker());
+        final Optional<String> failure = NegotiationService.send(context.getSource().getServer(), NationWarsMod.get().getNationRegistry(),
+                a.war(), a.nation().nationId(), NationWarsMod.get().getNegotiationDraftTracker());
         if (failure.isPresent())
         {
             context.getSource().sendFailure(Component.literal(failure.get()));
@@ -243,7 +243,8 @@ public final class NationWarsNegotiationCommands
             return 0;
         }
         final Actor a = actor.get();
-        final Optional<String> failure = NegotiationService.reject(NationWarsMod.get().getNationRegistry(), a.war(), a.nation().nationId());
+        final Optional<String> failure = NegotiationService.reject(context.getSource().getServer(),
+                NationWarsMod.get().getNationRegistry(), a.war(), a.nation().nationId());
         if (failure.isPresent())
         {
             context.getSource().sendFailure(Component.literal(failure.get()));
@@ -262,9 +263,9 @@ public final class NationWarsNegotiationCommands
         }
         final Actor a = actor.get();
         final NationRegistry registry = NationWarsMod.get().getNationRegistry();
-        NegotiationService.reject(registry, a.war(), a.nation().nationId());
-        final Optional<String> failure = NegotiationService.send(registry, a.war(), a.nation().nationId(),
-                NationWarsMod.get().getNegotiationDraftTracker());
+        NegotiationService.reject(context.getSource().getServer(), registry, a.war(), a.nation().nationId());
+        final Optional<String> failure = NegotiationService.send(context.getSource().getServer(), registry, a.war(),
+                a.nation().nationId(), NationWarsMod.get().getNegotiationDraftTracker());
         if (failure.isPresent())
         {
             context.getSource().sendFailure(Component.literal(failure.get()));

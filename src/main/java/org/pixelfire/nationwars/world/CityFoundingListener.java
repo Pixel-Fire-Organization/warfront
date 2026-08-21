@@ -17,6 +17,7 @@ import org.pixelfire.nationwars.config.NationWarsConfig;
 import org.pixelfire.nationwars.io.audit.ActorRole;
 import org.pixelfire.nationwars.io.audit.AuditEntry;
 import org.pixelfire.nationwars.io.audit.AuditSource;
+import org.pixelfire.nationwars.network.CitySyncHelper;
 import org.pixelfire.nationwars.state.City;
 import org.pixelfire.nationwars.state.CityState;
 import org.pixelfire.nationwars.state.FoundingContext;
@@ -171,6 +172,8 @@ public final class CityFoundingListener
                 nation.isOwner() ? ActorRole.LEADER : ActorRole.MEMBER, AuditSource.BLOCK,
                 ResourceLocation.tryBuild(NationWarsMod.MODID, "city_founded"), List.of(cityId),
                 new CompoundTag(), after, false));
+
+        CitySyncHelper.broadcast(server, registry, city);
 
         player.sendSystemMessage(Component.literal("Founded the city of " + name + ".").withStyle(ChatFormatting.GREEN));
     }

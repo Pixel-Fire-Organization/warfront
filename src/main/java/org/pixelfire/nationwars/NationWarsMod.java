@@ -45,12 +45,14 @@ import org.pixelfire.nationwars.world.CheckpointMoveGrace;
 import org.pixelfire.nationwars.world.CheckpointPlacementListener;
 import org.pixelfire.nationwars.world.CityDormancyListener;
 import org.pixelfire.nationwars.world.CityFoundingListener;
+import org.pixelfire.nationwars.world.CityRenderEffectsListener;
 import org.pixelfire.nationwars.world.ColumnProtectionListener;
 import org.pixelfire.nationwars.world.ColumnRegistry;
 import org.pixelfire.nationwars.world.OpacIntegration;
 import org.pixelfire.nationwars.world.block.NationWarsBlockEntities;
 import org.pixelfire.nationwars.world.block.NationWarsBlocks;
 import org.pixelfire.nationwars.world.block.NationWarsMenus;
+import org.pixelfire.nationwars.network.NationWarsNetwork;
 import org.pixelfire.nationwars.settlement.NationWarsPeaceClauses;
 import org.pixelfire.nationwars.settlement.NegotiationDraftTracker;
 import org.pixelfire.nationwars.settlement.SettlementBackstopListener;
@@ -111,6 +113,7 @@ public class NationWarsMod
     private WarProtectionListener warProtectionListener;
     private CaptureTickListener captureTickListener;
     private EvasionTickListener evasionTickListener;
+    private CityRenderEffectsListener cityRenderEffectsListener;
     private SettlementBackstopListener settlementBackstopListener;
     private NegotiationDraftTracker negotiationDraftTracker;
     private volatile boolean serverStopping;
@@ -133,6 +136,7 @@ public class NationWarsMod
         NationWarsPeaceClauses.bootstrap();
         CheckpointReverters.bootstrap();
         SettlementReverter.bootstrap();
+        NationWarsNetwork.register();
 
         BLOCKS.register(modEventBus);
         ITEMS.register(modEventBus);
@@ -232,6 +236,8 @@ public class NationWarsMod
         MinecraftForge.EVENT_BUS.register(warProtectionListener);
         evasionTickListener = new EvasionTickListener();
         MinecraftForge.EVENT_BUS.register(evasionTickListener);
+        cityRenderEffectsListener = new CityRenderEffectsListener();
+        MinecraftForge.EVENT_BUS.register(cityRenderEffectsListener);
 
         auditDir = event.getServer().getWorldPath(LevelResource.ROOT).resolve("data").resolve("nationwars-audit");
         auditWriter = new AuditWriter(auditDir, writerThread);
@@ -322,6 +328,11 @@ public class NationWarsMod
         {
             MinecraftForge.EVENT_BUS.unregister(evasionTickListener);
             evasionTickListener = null;
+        }
+        if (cityRenderEffectsListener != null)
+        {
+            MinecraftForge.EVENT_BUS.unregister(cityRenderEffectsListener);
+            cityRenderEffectsListener = null;
         }
         if (settlementBackstopListener != null)
         {
