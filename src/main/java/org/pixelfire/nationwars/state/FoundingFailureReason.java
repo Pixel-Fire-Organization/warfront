@@ -1,7 +1,7 @@
 package org.pixelfire.nationwars.state;
 
 /**
- * One entry per founding precondition (spec §8.1), in the order they are checked.
+ * One entry per founding precondition, in the order they are checked.
  */
 public enum FoundingFailureReason
 {

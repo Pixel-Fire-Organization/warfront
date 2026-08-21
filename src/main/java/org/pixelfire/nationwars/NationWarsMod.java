@@ -34,6 +34,10 @@ import org.pixelfire.nationwars.io.audit.AuditSource;
 import org.pixelfire.nationwars.io.audit.AuditWriter;
 import org.pixelfire.nationwars.state.NationRegistry;
 import org.pixelfire.nationwars.state.PeaceClause;
+import org.pixelfire.nationwars.world.CheckpointBreakListener;
+import org.pixelfire.nationwars.world.CheckpointMoveGrace;
+import org.pixelfire.nationwars.world.CheckpointPlacementListener;
+import org.pixelfire.nationwars.world.CityDormancyListener;
 import org.pixelfire.nationwars.world.CityFoundingListener;
 import org.pixelfire.nationwars.world.ColumnProtectionListener;
 import org.pixelfire.nationwars.world.ColumnRegistry;
@@ -80,6 +84,9 @@ public class NationWarsMod
     private ColumnRegistry columnRegistry;
     private ColumnProtectionListener columnProtectionListener;
     private CityFoundingListener cityFoundingListener;
+    private CheckpointPlacementListener checkpointPlacementListener;
+    private CheckpointBreakListener checkpointBreakListener;
+    private CityDormancyListener cityDormancyListener;
 
     // Forge only ever constructs one instance of a mod's main class; command handlers (which have no
     // other way to reach this instance) resolve it through here.
@@ -164,6 +171,14 @@ public class NationWarsMod
         cityFoundingListener = new CityFoundingListener();
         MinecraftForge.EVENT_BUS.register(cityFoundingListener);
 
+        final CheckpointMoveGrace checkpointMoveGrace = new CheckpointMoveGrace();
+        checkpointPlacementListener = new CheckpointPlacementListener(checkpointMoveGrace);
+        MinecraftForge.EVENT_BUS.register(checkpointPlacementListener);
+        checkpointBreakListener = new CheckpointBreakListener(checkpointMoveGrace);
+        MinecraftForge.EVENT_BUS.register(checkpointBreakListener);
+        cityDormancyListener = new CityDormancyListener();
+        MinecraftForge.EVENT_BUS.register(cityDormancyListener);
+
         auditDir = event.getServer().getWorldPath(LevelResource.ROOT).resolve("data").resolve("nationwars-audit");
         auditWriter = new AuditWriter(auditDir, writerThread);
         auditIndex = new AuditIndex();
@@ -199,6 +214,21 @@ public class NationWarsMod
         {
             MinecraftForge.EVENT_BUS.unregister(cityFoundingListener);
             cityFoundingListener = null;
+        }
+        if (checkpointPlacementListener != null)
+        {
+            MinecraftForge.EVENT_BUS.unregister(checkpointPlacementListener);
+            checkpointPlacementListener = null;
+        }
+        if (checkpointBreakListener != null)
+        {
+            MinecraftForge.EVENT_BUS.unregister(checkpointBreakListener);
+            checkpointBreakListener = null;
+        }
+        if (cityDormancyListener != null)
+        {
+            MinecraftForge.EVENT_BUS.unregister(cityDormancyListener);
+            cityDormancyListener = null;
         }
         columnRegistry = null;
         if (writerThread != null)

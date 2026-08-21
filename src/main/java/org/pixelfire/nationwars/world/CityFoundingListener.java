@@ -8,6 +8,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraftforge.event.level.BlockEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -35,10 +36,10 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Placing a {@link CityCoreBlock} is the founding action (spec §1, §8): this listener runs the ten
- * preconditions (§8.1) against the placement and either cancels it with the failing reason, or commits
+ * Placing a {@link CityCoreBlock} is the founding action: this listener runs the ten
+ * preconditions against the placement and either cancels it with the failing reason, or commits
  * the new {@link City}. OPAC is snapshotted into primitives here, on the main thread, before handing
- * anything to the world-free {@link FoundingPreconditions} check (spec §3.1/§4).
+ * anything to the world-free {@link FoundingPreconditions} check.
  */
 public final class CityFoundingListener
 {
@@ -136,7 +137,7 @@ public final class CityFoundingListener
         final String name = defaultCityName(nation.nationName());
 
         final City city = new City(cityId, name, nation.nationId(), nation.nationId(), level.dimension(), pos,
-                0, 0L, Set.of(), CityState.ACTIVE, null, 0L, 0L, now, 0L, 0, 0L);
+                0, 0L, Set.of(), CityState.ACTIVE, null, 0L, 0L, now, 0L, 0, 0L, 0L);
 
         registry.stripedLocks().withLocks(() ->
         {
@@ -156,7 +157,10 @@ public final class CityFoundingListener
         }
 
         NationWarsMod.get().getColumnRegistry().register(level.dimension(), pos);
-        OpacNations.claimChunk(server, level.dimension().location(), player, pos);
+
+        final ClaimShape coreShape = ClaimShape.parse(NationWarsConfig.CITY_CORE_CLAIM_SHAPE.get(), ClaimShape.PLUS);
+        final Set<ChunkPos> claimedChunks = ClaimSetComputation.chunksFor(coreShape, new ChunkPos(pos));
+        OpacNations.claimChunks(server, level.dimension().location(), nation.leaderUuid(), claimedChunks);
 
         final CompoundTag after = new CompoundTag();
         after.putUUID("cityId", cityId);

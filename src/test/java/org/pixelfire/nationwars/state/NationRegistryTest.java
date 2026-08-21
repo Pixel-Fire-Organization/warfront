@@ -73,6 +73,6 @@ class NationRegistryTest
     {
         final ResourceKey<Level> dimension = Mockito.mock(ResourceKey.class);
         return new City(cityId, "Testville", UUID.randomUUID(), UUID.randomUUID(), dimension, BlockPos.ZERO,
-                0, 0L, Set.of(), CityState.ACTIVE, null, 0L, 0L, 0L, 0L, 0, 0L);
+                0, 0L, Set.of(), CityState.ACTIVE, null, 0L, 0L, 0L, 0L, 0, 0L, 0L);
     }
 }

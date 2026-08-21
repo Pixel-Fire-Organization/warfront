@@ -3,7 +3,7 @@ package org.pixelfire.nationwars.state;
 import java.util.Optional;
 
 /**
- * The ten founding preconditions (spec §8.1), checked strictly in order so a rejection always names
+ * The ten founding preconditions, checked strictly in order so a rejection always names
  * the first one that actually failed.
  */
 public final class FoundingPreconditions
