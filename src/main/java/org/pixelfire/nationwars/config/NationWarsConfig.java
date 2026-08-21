@@ -440,8 +440,6 @@ public final class NationWarsConfig
     {
     }
 
-    // ---- Baked (parsed + validated) values, refreshed on every load/reload ----
-
     public static volatile List<TierDefinition> tiers = List.of();
     public static volatile List<PaymentEntry> paymentValues = List.of();
     public static volatile Map<String, String> loggingCategories = Map.of();

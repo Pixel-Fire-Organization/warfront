@@ -52,3 +52,7 @@ The mod is designed for concurrency from the ground up, driven by one constraint
 Core design principles from the spec (§1) that should guide any implementation choice: OPAC is the single source of truth for party/membership data — this mod only stores city/checkpoint/war/audit state keyed by OPAC party UUID; nothing is hardcoded (every gameplay constant, including tier ladders and payment values, is config-driven and validated at config load); griefing is prevented where possible and otherwise reversible via an audit log with rollback; there is no offline raiding or offline evasion — capture and war participation require live players.
 
 Package root: `org.pixelfire.nationwars` (`mod_group_id` in `gradle.properties`), source under `src/main/java/org/pixelfire/nationwars`.
+
+## Comments
+
+Comments pollute the codebase — the code should be self-documenting through clear naming and structure. Do not add a comment to restate what the code already says. Only comment when the code itself cannot explain it: a non-obvious constraint, the reason for a workaround/hack, a subtle invariant, or context a reader has no other way to get (e.g. why a lock spans a whole scan instead of per-item). When in doubt, leave it out — a comment justifying itself ("explains X because Y isn't obvious") is fine; a comment restating the next line is not.

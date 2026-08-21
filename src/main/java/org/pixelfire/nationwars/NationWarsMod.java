@@ -1,6 +1,7 @@
 package org.pixelfire.nationwars;
 
 import com.mojang.logging.LogUtils;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.Item;
@@ -15,6 +16,7 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
+import net.minecraft.world.level.storage.LevelResource;
 import net.minecraftforge.registries.DeferredRegister;
 import net.minecraftforge.registries.ForgeRegistries;
 import net.minecraftforge.registries.IForgeRegistry;
@@ -25,12 +27,19 @@ import org.pixelfire.nationwars.config.NationWarsConfig;
 import org.pixelfire.nationwars.io.NationWarsLogging;
 import org.pixelfire.nationwars.io.NationWarsSavedData;
 import org.pixelfire.nationwars.io.WriterThread;
+import org.pixelfire.nationwars.io.audit.ActorRole;
+import org.pixelfire.nationwars.io.audit.AuditEntry;
+import org.pixelfire.nationwars.io.audit.AuditIndex;
+import org.pixelfire.nationwars.io.audit.AuditSource;
+import org.pixelfire.nationwars.io.audit.AuditWriter;
 import org.pixelfire.nationwars.state.NationRegistry;
 import org.pixelfire.nationwars.state.PeaceClause;
 import org.pixelfire.nationwars.world.OpacIntegration;
 import org.slf4j.Logger;
 
+import java.nio.file.Path;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 
@@ -42,17 +51,12 @@ public class NationWarsMod
 
     private static final Logger LOGGER = LogUtils.getLogger();
 
-    // Vanilla-registry deferred registers. Empty for now — later stages register the City Core and
-    // Checkpoint blocks/items/block entities and the City GUI's menu type here.
     public static final DeferredRegister<Block> BLOCKS = DeferredRegister.create(ForgeRegistries.BLOCKS, MODID);
     public static final DeferredRegister<Item> ITEMS = DeferredRegister.create(ForgeRegistries.ITEMS, MODID);
     public static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITY_TYPES =
             DeferredRegister.create(ForgeRegistries.BLOCK_ENTITY_TYPES, MODID);
     public static final DeferredRegister<MenuType<?>> MENU_TYPES = DeferredRegister.create(ForgeRegistries.MENU_TYPES, MODID);
 
-    // A brand-new, mod-owned registry for peace settlement clauses (state.PeaceClause). New clause
-    // types register into this with no change needed to the settlement pipeline that applies them.
-    // No clause types are registered yet.
     public static final DeferredRegister<PeaceClause> PEACE_CLAUSES =
             DeferredRegister.create(ResourceLocation.tryBuild(MODID, "peace_clause"), MODID);
     public static final Supplier<IForgeRegistry<PeaceClause>> PEACE_CLAUSE_REGISTRY = PEACE_CLAUSES.makeRegistry(RegistryBuilder::new);
@@ -62,14 +66,21 @@ public class NationWarsMod
     // make it tunable.
     private static final int WRITER_QUEUE_CAPACITY = 256;
 
-    // Threading foundation: a fresh registry, worker pool, and writer thread per server lifecycle,
-    // created before any feature that needs them and torn down cleanly when the server stops.
     private NationRegistry nationRegistry;
     private WorkerPool workerPool;
     private WriterThread writerThread;
+    private AuditWriter auditWriter;
+    private AuditIndex auditIndex;
+    private Path auditDir;
+
+    // Forge only ever constructs one instance of a mod's main class; command handlers (which have no
+    // other way to reach this instance) resolve it through here.
+    private static NationWarsMod instance;
 
     public NationWarsMod(FMLJavaModLoadingContext context)
     {
+        instance = this;
+
         IEventBus modEventBus = context.getModEventBus();
 
         modEventBus.addListener(this::commonSetup);
@@ -135,19 +146,32 @@ public class NationWarsMod
         workerPool = new WorkerPool(workerThreads, workerQueueCapacity);
         writerThread = new WriterThread(WRITER_QUEUE_CAPACITY);
 
-        // Attaches (or creates) this mod's save data on the Overworld, proving the persistence
-        // skeleton round-trips through a real world folder before any real state lives in it.
+        auditDir = event.getServer().getWorldPath(LevelResource.ROOT).resolve("data").resolve("nationwars-audit");
+        auditWriter = new AuditWriter(auditDir, writerThread);
+        auditIndex = new AuditIndex();
+        final int auditRetentionDays = NationWarsConfig.AUDIT_RETENTION_DAYS.get();
+        auditIndex.rebuildAsync(auditDir, auditRetentionDays, auditWriter.fileLock(), workerPool, event.getServer());
+
+        auditWriter.append(AuditEntry.of(null, "SYSTEM", null, ActorRole.SYSTEM, AuditSource.AUTO,
+                ResourceLocation.tryBuild(MODID, "diagnostic_synthetic_entry"), List.of(),
+                new CompoundTag(), new CompoundTag(), false));
+
         final NationWarsSavedData savedData = NationWarsSavedData.get(event.getServer());
 
         LOGGER.info("nationwars starting; lockStripes={}, workerThreads={}, workerQueueCapacity={}, "
-                        + "savedDataSchemaVersion={}",
-                lockStripes, workerThreads, workerQueueCapacity, NationWarsSavedData.CURRENT_SCHEMA_VERSION);
+                        + "savedDataSchemaVersion={}, auditRetentionDays={}",
+                lockStripes, workerThreads, workerQueueCapacity, NationWarsSavedData.CURRENT_SCHEMA_VERSION, auditRetentionDays);
         LOGGER.debug("nationwars save data attached: dummyPayload='{}'", savedData.dummyPayload());
     }
 
     @SubscribeEvent
     public void onServerStopping(final ServerStoppingEvent event)
     {
+        // AuditWriter has nothing to flush at shutdown: every append() already fully writes and
+        // closes its day file synchronously on the writer thread by the time it returns.
+        auditWriter = null;
+        auditIndex = null;
+        auditDir = null;
         if (writerThread != null)
         {
             writerThread.close();
@@ -159,5 +183,30 @@ public class NationWarsMod
             workerPool = null;
         }
         nationRegistry = null;
+    }
+
+    public static NationWarsMod get()
+    {
+        return instance;
+    }
+
+    public AuditIndex getAuditIndex()
+    {
+        return auditIndex;
+    }
+
+    public AuditWriter getAuditWriter()
+    {
+        return auditWriter;
+    }
+
+    public Path getAuditDir()
+    {
+        return auditDir;
+    }
+
+    public WorkerPool getWorkerPool()
+    {
+        return workerPool;
     }
 }

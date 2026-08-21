@@ -18,21 +18,16 @@ import org.slf4j.Logger;
 import java.util.Map;
 
 /**
- * Sets up the mod's own rolling diagnostic log file, separate from the governance-oriented audit log
- * and from vanilla's {@code logs/latest.log}. Registered entirely in code — no {@code log4j2.xml} edit
- * is needed — against whatever {@link LoggerContext} is already active, so it works the same in a dev
- * environment and in a packaged jar.
+ * Sets up the mod's own rolling diagnostic log file, entirely in code (no {@code log4j2.xml} edit),
+ * separate from the governance-oriented audit log and from vanilla's {@code logs/latest.log}.
  *
- * <p>Everything logged under the {@code nationwars} logger name (or a {@code nationwars.<category>}
- * child of it, e.g. {@code nationwars.capture}) goes to {@code logs/nationwars/nationwars.log} and,
- * at or above {@code logToServerConsole}, to the main server console. It does not also reach
- * {@code logs/latest.log} or {@code logs/debug.log} — additivity is cut at the {@code nationwars}
- * logger so this mod's (potentially very chatty) diagnostic output can't flood those files.
- *
- * <p>Each category has its own {@link LoggerConfig} carrying only a level, no appenders of its own;
- * a category logger's events bubble up to the shared {@code nationwars} logger, which is the only
- * place the actual file/console appenders live. This means changing one category's level at runtime
- * (see {@link #setCategoryLevel}) can never accidentally duplicate or drop where its output goes.
+ * <p>The {@code nationwars} logger has {@code additivity=false}, so its output (and that of any
+ * {@code nationwars.<category>} child, e.g. {@code nationwars.capture}) never bubbles up into
+ * {@code logs/latest.log} or {@code logs/debug.log} — only into {@code logs/nationwars/nationwars.log}
+ * and, at or above {@code logToServerConsole}, the main console. Category loggers carry no appenders
+ * of their own, only a level; a passing event bubbles up to {@code nationwars} for the actual writing,
+ * so changing one category's level at runtime ({@link #setCategoryLevel}) can't duplicate or drop
+ * where its output goes.
  */
 public final class NationWarsLogging
 {
@@ -103,8 +98,6 @@ public final class NationWarsLogging
 
         BOOTSTRAP_LOGGER.info("nationwars diagnostic logging registered: file={}/nationwars.log, rollSizeMb={}, history={}, consoleLevel={}, categories={}",
                 logDir, logFileSizeMb, logFileHistory, consoleLevel, categoryLevels.keySet());
-        // Through the freshly-registered "nationwars" logger itself, not BOOTSTRAP_LOGGER above:
-        // this line is the first proof the file actually receives content and latest.log does not.
         LogManager.getLogger(LOGGER_NAME).info("diagnostic log file ready at {}/nationwars.log", logDir);
     }
 
@@ -141,8 +134,6 @@ public final class NationWarsLogging
                 ? new AppenderRef[]{ fileRef, AppenderRef.createAppenderRef(CONSOLE_APPENDER_NAME, consoleLevel, null) }
                 : new AppenderRef[]{ fileRef };
 
-        // additivity=false: this is the one point where nationwars output is cut off from bubbling up
-        // to Log4j2's root logger (and therefore out of logs/latest.log and logs/debug.log).
         final LoggerConfig loggerConfig = LoggerConfig.newBuilder()
                 .withAdditivity(false)
                 .withLevel(defaultLevel)
@@ -160,8 +151,6 @@ public final class NationWarsLogging
 
     private static void registerCategoryLogger(final Configuration config, final String category, final Level level)
     {
-        // additivity=true (the default): a category logger carries no appenders of its own and exists
-        // purely as a level gate, so a passing event bubbles up to the nationwars logger for writing.
         final LoggerConfig loggerConfig = LoggerConfig.newBuilder()
                 .withAdditivity(true)
                 .withLevel(level)
