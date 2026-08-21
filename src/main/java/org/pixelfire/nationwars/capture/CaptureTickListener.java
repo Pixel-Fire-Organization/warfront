@@ -23,6 +23,7 @@ import org.pixelfire.nationwars.state.CityState;
 import org.pixelfire.nationwars.state.NationRegistry;
 import org.pixelfire.nationwars.state.War;
 import org.pixelfire.nationwars.state.WarPhase;
+import org.pixelfire.nationwars.war.WarScore;
 import org.pixelfire.nationwars.world.OpacNations;
 
 import java.util.ArrayList;
@@ -222,6 +223,16 @@ public final class CaptureTickListener
             cosmeticEffect.shatter(level, checkpoint.pos(), checkpoint.checkpointId(), checkpoint.cityId());
         }
 
+        final City city = registry.cities().get(checkpoint.cityId());
+        if (city != null)
+        {
+            final boolean retakenInDefence = war.defenders().members().contains(city.ownerNationId())
+                    ? war.defenders().members().contains(newHolder)
+                    : war.attackers().members().contains(newHolder);
+            WarScore.award(registry, war.warId(), newHolder,
+                    retakenInDefence ? NationWarsConfig.SCORE_CHECKPOINT_DEFENDED.get() : NationWarsConfig.SCORE_CHECKPOINT_CAPTURE.get());
+        }
+
         final CompoundTag after = new CompoundTag();
         after.putUUID("newHolderNationId", newHolder);
         NationWarsMod.get().getAuditWriter().append(AuditEntry.of(null, "SYSTEM", newHolder, ActorRole.SYSTEM, AuditSource.AUTO,
@@ -268,8 +279,11 @@ public final class CaptureTickListener
             return;
         }
 
-        boolean allHeldByAttackers = true;
-        boolean allHeldByDefenders = true;
+        // Roles are relative to which coalition actually owns this city, not fixed attacker/defender
+        // labels — a counter-offensive can put an attacker-owned city under siege too.
+        final boolean ownerIsDefender = war.defenders().members().contains(city.ownerNationId());
+        boolean allHeldByHostiles = true;
+        boolean allHeldByOwnerSide = true;
         for (final UUID checkpointId : city.checkpointIds())
         {
             final Checkpoint checkpoint = registry.checkpoints().get(checkpointId);
@@ -279,26 +293,30 @@ public final class CaptureTickListener
             }
             final boolean heldByAttacker = war.attackers().members().contains(checkpoint.holderNationId());
             final boolean heldByDefender = war.defenders().members().contains(checkpoint.holderNationId());
-            allHeldByAttackers &= heldByAttacker;
-            allHeldByDefenders &= heldByDefender;
+            final boolean heldByHostile = ownerIsDefender ? heldByAttacker : heldByDefender;
+            final boolean heldByOwnerSide = ownerIsDefender ? heldByDefender : heldByAttacker;
+            allHeldByHostiles &= heldByHostile;
+            allHeldByOwnerSide &= heldByOwnerSide;
         }
 
-        if (allHeldByAttackers && city.state() != CityState.OCCUPIED)
+        if (allHeldByHostiles && city.state() != CityState.OCCUPIED)
         {
-            occupyCity(registry, war, city, now);
+            final UUID occupierPrimary = ownerIsDefender ? war.attackers().primaryNationId() : war.defenders().primaryNationId();
+            occupyCity(registry, war, city, occupierPrimary, now);
         }
-        else if (allHeldByDefenders && city.state() == CityState.OCCUPIED && now >= city.occupationLockUntil())
+        else if (allHeldByOwnerSide && city.state() == CityState.OCCUPIED && now >= city.occupationLockUntil())
         {
             releaseOccupation(registry, city);
         }
     }
 
-    private void occupyCity(final NationRegistry registry, final War war, final City city, final long now)
+    private void occupyCity(final NationRegistry registry, final War war, final City city, final UUID occupierPrimary, final long now)
     {
+        final boolean firstTimeThisWar = !war.occupiedCityIds().contains(city.cityId());
         final long lockUntil = now + NationWarsConfig.OCCUPATION_LOCK_DURATION_SECONDS.get() * 1000L;
         registry.stripedLocks().withLocks(() ->
         {
-            registry.cities().put(city.cityId(), withOccupation(city, CityState.OCCUPIED, war.attackers().primaryNationId(),
+            registry.cities().put(city.cityId(), withOccupation(city, CityState.OCCUPIED, occupierPrimary,
                     now, lockUntil, city.dormantSince()));
             final War current = registry.wars().get(war.warId());
             if (current != null)
@@ -323,7 +341,12 @@ public final class CaptureTickListener
             }
         }
 
-        NationWarsMod.get().getAuditWriter().append(AuditEntry.of(null, "SYSTEM", war.attackers().primaryNationId(), ActorRole.SYSTEM,
+        if (firstTimeThisWar)
+        {
+            WarScore.award(registry, war.warId(), occupierPrimary, NationWarsConfig.SCORE_CITY_OCCUPIED.get());
+        }
+
+        NationWarsMod.get().getAuditWriter().append(AuditEntry.of(null, "SYSTEM", occupierPrimary, ActorRole.SYSTEM,
                 AuditSource.AUTO, ResourceLocation.tryBuild(NationWarsMod.MODID, "city_occupied"), List.of(city.cityId()),
                 new CompoundTag(), new CompoundTag(), false));
     }
