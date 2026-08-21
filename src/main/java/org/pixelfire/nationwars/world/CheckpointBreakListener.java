@@ -13,6 +13,7 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraftforge.event.level.BlockEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import org.pixelfire.nationwars.NationWarsMod;
+import org.pixelfire.nationwars.capture.CaptureTickListener;
 import org.pixelfire.nationwars.config.NationWarsConfig;
 import org.pixelfire.nationwars.config.TierDefinition;
 import org.pixelfire.nationwars.io.audit.ActorRole;
@@ -43,10 +44,12 @@ import java.util.UUID;
 public final class CheckpointBreakListener
 {
     private final CheckpointMoveGrace moveGrace;
+    private final CaptureTickListener captureTickListener;
 
-    public CheckpointBreakListener(final CheckpointMoveGrace moveGrace)
+    public CheckpointBreakListener(final CheckpointMoveGrace moveGrace, final CaptureTickListener captureTickListener)
     {
         this.moveGrace = moveGrace;
+        this.captureTickListener = captureTickListener;
     }
 
     @SubscribeEvent
@@ -67,6 +70,16 @@ public final class CheckpointBreakListener
         final City city = checkpoint == null ? null : registry.cities().get(checkpoint.cityId());
         if (checkpoint == null || city == null)
         {
+            return;
+        }
+
+        if (city.state() == CityState.UNDER_SIEGE || city.state() == CityState.OCCUPIED)
+        {
+            // Purely cosmetic while a siege is live. Anyone can trigger it — including an
+            // attacker swinging at the flag — since the Checkpoint record and its claims are untouched
+            // either way; only the ACTIVE-state citizen/minimum checks below govern a real break.
+            event.setCanceled(true);
+            captureTickListener.triggerCosmeticBreak(level, checkpoint);
             return;
         }
 

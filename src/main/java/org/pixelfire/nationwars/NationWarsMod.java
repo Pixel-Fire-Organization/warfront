@@ -37,6 +37,7 @@ import org.pixelfire.nationwars.activity.ActivityTracker;
 import org.pixelfire.nationwars.activity.CombatLogListener;
 import org.pixelfire.nationwars.activity.CombatTagTracker;
 import org.pixelfire.nationwars.activity.LoginShieldListener;
+import org.pixelfire.nationwars.capture.CaptureTickListener;
 import org.pixelfire.nationwars.state.NationRegistry;
 import org.pixelfire.nationwars.state.PeaceClause;
 import org.pixelfire.nationwars.world.CheckpointBreakListener;
@@ -102,6 +103,7 @@ public class NationWarsMod
     private LoginShieldListener loginShieldListener;
     private WarLifecycleListener warLifecycleListener;
     private WarProtectionListener warProtectionListener;
+    private CaptureTickListener captureTickListener;
     private volatile boolean serverStopping;
 
     // Forge only ever constructs one instance of a mod's main class; command handlers (which have no
@@ -188,10 +190,13 @@ public class NationWarsMod
         cityFoundingListener = new CityFoundingListener();
         MinecraftForge.EVENT_BUS.register(cityFoundingListener);
 
+        captureTickListener = new CaptureTickListener();
+        MinecraftForge.EVENT_BUS.register(captureTickListener);
+
         final CheckpointMoveGrace checkpointMoveGrace = new CheckpointMoveGrace();
         checkpointPlacementListener = new CheckpointPlacementListener(checkpointMoveGrace);
         MinecraftForge.EVENT_BUS.register(checkpointPlacementListener);
-        checkpointBreakListener = new CheckpointBreakListener(checkpointMoveGrace);
+        checkpointBreakListener = new CheckpointBreakListener(checkpointMoveGrace, captureTickListener);
         MinecraftForge.EVENT_BUS.register(checkpointBreakListener);
         cityDormancyListener = new CityDormancyListener();
         MinecraftForge.EVENT_BUS.register(cityDormancyListener);
@@ -289,6 +294,11 @@ public class NationWarsMod
         {
             MinecraftForge.EVENT_BUS.unregister(warProtectionListener);
             warProtectionListener = null;
+        }
+        if (captureTickListener != null)
+        {
+            MinecraftForge.EVENT_BUS.unregister(captureTickListener);
+            captureTickListener = null;
         }
         activityTracker = null;
         combatTagTracker = null;
