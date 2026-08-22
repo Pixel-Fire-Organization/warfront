@@ -18,6 +18,7 @@ import org.pixelfire.nationwars.io.audit.ActorRole;
 import org.pixelfire.nationwars.io.audit.AuditEntry;
 import org.pixelfire.nationwars.io.audit.AuditSource;
 import org.pixelfire.nationwars.network.CitySyncHelper;
+import org.pixelfire.nationwars.settlement.NegotiationService;
 import org.pixelfire.nationwars.state.City;
 import org.pixelfire.nationwars.state.CityState;
 import org.pixelfire.nationwars.state.FoundingContext;
@@ -135,7 +136,7 @@ public final class CityFoundingListener
         final NationRegistry registry = NationWarsMod.get().getNationRegistry();
         final long now = System.currentTimeMillis();
         final UUID cityId = UUID.randomUUID();
-        final String name = defaultCityName(nation.nationName());
+        final String name = defaultCityName(registry, nation.nationName());
 
         final City city = new City(cityId, name, nation.nationId(), nation.nationId(), level.dimension(), pos,
                 0, 0L, Set.of(), CityState.ACTIVE, null, 0L, 0L, now, 0L, 0, 0L, 0L);
@@ -178,7 +179,34 @@ public final class CityFoundingListener
         player.sendSystemMessage(Component.literal("Founded the city of " + name + ".").withStyle(ChatFormatting.GREEN));
     }
 
-    private static String defaultCityName(final String nationName)
+    /**
+     * Tries each configured default name in order, first come first served; falls back to
+     * "&lt;Party&gt; City" (numbered if that's taken too) once the whole list is exhausted. Either way
+     * the result is guaranteed unique (case-insensitive) among existing cities — the founder can always
+     * rename from the City Core GUI afterward.
+     */
+    private static String defaultCityName(final NationRegistry registry, final String nationName)
+    {
+        for (final String candidate : NationWarsConfig.CITY_DEFAULT_NAMES.get())
+        {
+            if (NegotiationService.findCityByName(registry, candidate) == null)
+            {
+                return candidate;
+            }
+        }
+
+        final String base = fallbackBaseName(nationName);
+        String candidate = base;
+        int suffix = 2;
+        while (NegotiationService.findCityByName(registry, candidate) != null)
+        {
+            candidate = base + " " + suffix;
+            suffix++;
+        }
+        return candidate;
+    }
+
+    private static String fallbackBaseName(final String nationName)
     {
         final String candidate = nationName.trim() + " City";
         if (candidate.length() <= 24)

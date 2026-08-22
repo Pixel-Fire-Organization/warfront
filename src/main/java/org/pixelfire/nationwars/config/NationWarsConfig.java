@@ -45,6 +45,7 @@ public final class NationWarsConfig
     public static final ForgeConfigSpec.IntValue CHECKPOINT_MOVE_GRACE_SECONDS;
     public static final ForgeConfigSpec.IntValue CHECKPOINT_RESPAWN_DELAY_SECONDS;
     public static final ForgeConfigSpec.BooleanValue ALLOW_FOUNDING_DURING_WAR;
+    public static final ForgeConfigSpec.ConfigValue<List<? extends String>> CITY_DEFAULT_NAMES;
 
     // ---- Tiers and payment --------------------------------------------------------------------
 
@@ -57,6 +58,7 @@ public final class NationWarsConfig
     public static final ForgeConfigSpec.ConfigValue<String> CITY_FOUND_RANK;
     public static final ForgeConfigSpec.ConfigValue<String> CHECKPOINT_PLACE_RANK;
     public static final ForgeConfigSpec.ConfigValue<String> CITY_UPGRADE_RANK;
+    public static final ForgeConfigSpec.ConfigValue<String> CITY_RENAME_RANK;
     public static final ForgeConfigSpec.BooleanValue ALLIES_CAN_PLACE_CHECKPOINTS;
     public static final ForgeConfigSpec.BooleanValue ALLOW_UPGRADE_DURING_WAR;
     public static final ForgeConfigSpec.IntValue STAFF_PERMISSION_LEVEL;
@@ -207,6 +209,15 @@ public final class NationWarsConfig
         ALLOW_FOUNDING_DURING_WAR = BUILDER.comment(
                         "If false, a nation currently in an unsettled war cannot found a new city.")
                 .define("allowFoundingDuringWar", false);
+        CITY_DEFAULT_NAMES = BUILDER.comment(
+                        "Candidate names offered to a newly founded city, tried in order until an unclaimed (case-insensitive) "
+                                + "one is found; a founder can always rename from the City Core GUI afterward. If every name here is "
+                                + "already taken, falls back to \"<Party> City\" with a numeric suffix.")
+                .defineList("cityDefaultNames", List.of(
+                        "Ashford", "Brightwater", "Cinderfall", "Dawnspire", "Eastmarch", "Frosthaven", "Greywatch",
+                        "Havenport", "Ironhold", "Kingsreach", "Lonebridge", "Millbrook", "Northgate", "Oakenvale",
+                        "Pinehollow", "Ravenscar", "Silverford", "Thornwood", "Umberfall", "Vesterholm", "Westmoor",
+                        "Yorindale", "Zenithspire"), o -> o instanceof String);
         BUILDER.pop();
 
         BUILDER.push("tiers");
@@ -242,6 +253,8 @@ public final class NationWarsConfig
         CHECKPOINT_PLACE_RANK = BUILDER.comment("Minimum party rank required to place a checkpoint.").define("checkpointPlaceRank", "MEMBER");
         CITY_UPGRADE_RANK = BUILDER.comment("Minimum party rank required to confirm a tier upgrade in the City GUI.")
                 .define("cityUpgradeRank", "MODERATOR");
+        CITY_RENAME_RANK = BUILDER.comment("Minimum party rank required to rename a city from the City Core GUI.")
+                .define("cityRenameRank", "MODERATOR");
         ALLIES_CAN_PLACE_CHECKPOINTS = BUILDER.comment("If true, members of an allied nation may also place checkpoints for a city, not just its own citizens.")
                 .define("alliesCanPlaceCheckpoints", false);
         ALLOW_UPGRADE_DURING_WAR = BUILDER.comment(

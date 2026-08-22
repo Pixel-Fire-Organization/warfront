@@ -121,6 +121,11 @@ public final class CityCoreMenu extends AbstractContainerMenu
         return data.get(DATA_CITY_STATE);
     }
 
+    public BlockPos corePos()
+    {
+        return corePos;
+    }
+
     private City currentCity()
     {
         final NationRegistry registry = NationWarsMod.get().getNationRegistry();

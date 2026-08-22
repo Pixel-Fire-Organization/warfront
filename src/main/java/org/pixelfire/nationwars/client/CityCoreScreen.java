@@ -3,11 +3,14 @@ package org.pixelfire.nationwars.client;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
+import org.pixelfire.nationwars.network.NationWarsNetwork;
+import org.pixelfire.nationwars.network.RenameCityPacket;
 import org.pixelfire.nationwars.state.CityState;
 import org.pixelfire.nationwars.world.menu.CityCoreMenu;
 
@@ -18,6 +21,8 @@ import org.pixelfire.nationwars.world.menu.CityCoreMenu;
 @OnlyIn(Dist.CLIENT)
 public final class CityCoreScreen extends AbstractContainerScreen<CityCoreMenu>
 {
+    private EditBox nameField;
+
     public CityCoreScreen(final CityCoreMenu menu, final Inventory inventory, final Component title)
     {
         super(menu, inventory, title);
@@ -56,6 +61,7 @@ public final class CityCoreScreen extends AbstractContainerScreen<CityCoreMenu>
         graphics.drawString(font, "Checkpoints: " + menu.checkpointCount(), 8, 42, 0x404040, false);
         graphics.drawString(font, "State: " + CityState.values()[menu.cityStateOrdinal()], 8, 54, 0x404040, false);
         graphics.drawString(font, "Deposit", 55, 39, 0x404040, false);
+        graphics.drawString(font, "Rename:", 8, 97, 0x404040, false);
     }
 
     @Override
@@ -65,6 +71,16 @@ public final class CityCoreScreen extends AbstractContainerScreen<CityCoreMenu>
         addRenderableWidget(Button.builder(Component.literal("Upgrade"),
                         button -> Minecraft.getInstance().gameMode.handleInventoryButtonClick(menu.containerId, CityCoreMenu.UPGRADE_BUTTON_ID))
                 .bounds(leftPos + 8, topPos + 70, 80, 20)
+                .build());
+
+        nameField = new EditBox(font, leftPos + 8, topPos + 108, 104, 16, Component.literal("City name"));
+        nameField.setMaxLength(24);
+        nameField.setValue(title.getString());
+        addRenderableWidget(nameField);
+
+        addRenderableWidget(Button.builder(Component.literal("Rename"),
+                        button -> NationWarsNetwork.sendToServer(RenameCityPacket.of(menu.corePos(), nameField.getValue())))
+                .bounds(leftPos + 116, topPos + 106, 52, 20)
                 .build());
     }
 }
