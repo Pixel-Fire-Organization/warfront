@@ -1,127 +1,485 @@
 package org.pixelfire.nationwars;
 
 import com.mojang.logging.LogUtils;
-import net.minecraft.client.Minecraft;
-import net.minecraft.core.registries.Registries;
-import net.minecraft.world.food.FoodProperties;
-import net.minecraft.world.item.BlockItem;
-import net.minecraft.world.item.CreativeModeTab;
-import net.minecraft.world.item.CreativeModeTabs;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.state.BlockBehaviour;
-import net.minecraft.world.level.material.MapColor;
-import net.minecraftforge.api.distmarker.Dist;
+import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
 import net.minecraftforge.event.server.ServerStartingEvent;
+import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.config.ModConfig;
-import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
+import net.minecraft.world.level.storage.LevelResource;
 import net.minecraftforge.registries.DeferredRegister;
 import net.minecraftforge.registries.ForgeRegistries;
-import net.minecraftforge.registries.RegistryObject;
+import net.minecraftforge.registries.IForgeRegistry;
+import net.minecraftforge.registries.RegistryBuilder;
+import org.apache.logging.log4j.Level;
+import org.pixelfire.nationwars.compute.WorkerPool;
+import org.pixelfire.nationwars.config.NationWarsConfig;
+import org.pixelfire.nationwars.io.NationWarsLogging;
+import org.pixelfire.nationwars.io.NationWarsSavedData;
+import org.pixelfire.nationwars.io.PersistenceIo;
+import org.pixelfire.nationwars.io.WriterThread;
+import org.pixelfire.nationwars.io.audit.ActorRole;
+import org.pixelfire.nationwars.io.audit.AuditEntry;
+import org.pixelfire.nationwars.io.audit.AuditIndex;
+import org.pixelfire.nationwars.io.audit.AuditSource;
+import org.pixelfire.nationwars.io.audit.AuditWriter;
+import org.pixelfire.nationwars.activity.ActivityEventListener;
+import org.pixelfire.nationwars.activity.ActivityTracker;
+import org.pixelfire.nationwars.activity.CombatLogListener;
+import org.pixelfire.nationwars.activity.CombatTagTracker;
+import org.pixelfire.nationwars.activity.LoginShieldListener;
+import org.pixelfire.nationwars.capture.CaptureTickListener;
+import org.pixelfire.nationwars.state.NationRegistry;
+import org.pixelfire.nationwars.state.PeaceClause;
+import org.pixelfire.nationwars.world.CheckpointBreakListener;
+import org.pixelfire.nationwars.world.CheckpointMoveGrace;
+import org.pixelfire.nationwars.world.CheckpointPlacementListener;
+import org.pixelfire.nationwars.world.CityDormancyListener;
+import org.pixelfire.nationwars.world.CityFoundingListener;
+import org.pixelfire.nationwars.world.CityRenderEffectsListener;
+import org.pixelfire.nationwars.world.ValidationSweepListener;
+import org.pixelfire.nationwars.world.ColumnProtectionListener;
+import org.pixelfire.nationwars.world.ColumnRegistry;
+import org.pixelfire.nationwars.world.OpacIntegration;
+import org.pixelfire.nationwars.world.block.NationWarsBlockEntities;
+import org.pixelfire.nationwars.world.block.NationWarsBlocks;
+import org.pixelfire.nationwars.world.block.NationWarsMenus;
+import org.pixelfire.nationwars.network.NationWarsNetwork;
+import org.pixelfire.nationwars.settlement.NationWarsPeaceClauses;
+import org.pixelfire.nationwars.settlement.NegotiationDraftTracker;
+import org.pixelfire.nationwars.settlement.SettlementBackstopListener;
+import org.pixelfire.nationwars.settlement.SettlementReverter;
+import org.pixelfire.nationwars.world.CheckpointReverters;
+import org.pixelfire.nationwars.war.EvasionTickListener;
+import org.pixelfire.nationwars.war.WarLifecycleListener;
+import org.pixelfire.nationwars.war.WarProtectionListener;
 import org.slf4j.Logger;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Path;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Supplier;
 
 // The value here should match an entry in the META-INF/mods.toml file
 @Mod(NationWarsMod.MODID)
 public class NationWarsMod
 {
-    // Define mod id in a common place for everything to reference
     public static final String MODID = "nationwars";
-    // Directly reference a slf4j logger
+
     private static final Logger LOGGER = LogUtils.getLogger();
-    // Create a Deferred Register to hold Blocks which will all be registered under the "nationwars" namespace
+
     public static final DeferredRegister<Block> BLOCKS = DeferredRegister.create(ForgeRegistries.BLOCKS, MODID);
-    // Create a Deferred Register to hold Items which will all be registered under the "nationwars" namespace
     public static final DeferredRegister<Item> ITEMS = DeferredRegister.create(ForgeRegistries.ITEMS, MODID);
-    // Create a Deferred Register to hold CreativeModeTabs which will all be registered under the "nationwars" namespace
-    public static final DeferredRegister<CreativeModeTab> CREATIVE_MODE_TABS = DeferredRegister.create(Registries.CREATIVE_MODE_TAB, MODID);
+    public static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITY_TYPES =
+            DeferredRegister.create(ForgeRegistries.BLOCK_ENTITY_TYPES, MODID);
+    public static final DeferredRegister<MenuType<?>> MENU_TYPES = DeferredRegister.create(ForgeRegistries.MENU_TYPES, MODID);
 
-    // Creates a new Block with the id "nationwars:example_block", combining the namespace and path
-    public static final RegistryObject<Block> EXAMPLE_BLOCK = BLOCKS.register("example_block", () -> new Block(BlockBehaviour.Properties.of().mapColor(MapColor.STONE)));
-    // Creates a new BlockItem with the id "nationwars:example_block", combining the namespace and path
-    public static final RegistryObject<Item> EXAMPLE_BLOCK_ITEM = ITEMS.register("example_block", () -> new BlockItem(EXAMPLE_BLOCK.get(), new Item.Properties()));
+    public static final DeferredRegister<PeaceClause> PEACE_CLAUSES =
+            DeferredRegister.create(ResourceLocation.tryBuild(MODID, "peace_clause"), MODID);
+    public static final Supplier<IForgeRegistry<PeaceClause>> PEACE_CLAUSE_REGISTRY = PEACE_CLAUSES.makeRegistry(RegistryBuilder::new);
 
-    // Creates a new food item with the id "nationwars:example_id", nutrition 1 and saturation 2
-    public static final RegistryObject<Item> EXAMPLE_ITEM = ITEMS.register("example_item", () -> new Item(new Item.Properties().food(new FoodProperties.Builder()
-            .alwaysEat().nutrition(1).saturationMod(2f).build())));
+    // No config key exists yet for the I/O writer's queue depth (Appendix A only sizes the compute
+    // worker pool's queue); this default carries it until audit logging (a later stage) needs to
+    // make it tunable.
+    private static final int WRITER_QUEUE_CAPACITY = 256;
 
-    // Creates a creative tab with the id "nationwars:example_tab" for the example item, that is placed after the combat tab
-    public static final RegistryObject<CreativeModeTab> EXAMPLE_TAB = CREATIVE_MODE_TABS.register("example_tab", () -> CreativeModeTab.builder()
-            .withTabsBefore(CreativeModeTabs.COMBAT)
-            .icon(() -> EXAMPLE_ITEM.get().getDefaultInstance())
-            .displayItems((parameters, output) -> {
-                output.accept(EXAMPLE_ITEM.get()); // Add the example item to the tab. For your own tabs, this method is preferred over the event
-            }).build());
+    private NationRegistry nationRegistry;
+    private NationWarsSavedData savedData;
+    private PersistenceIo persistenceIo;
+    private File savedDataFile;
+    private WorkerPool workerPool;
+    private WriterThread writerThread;
+    private AuditWriter auditWriter;
+    private AuditIndex auditIndex;
+    private Path auditDir;
+    private ColumnRegistry columnRegistry;
+    private ColumnProtectionListener columnProtectionListener;
+    private CityFoundingListener cityFoundingListener;
+    private CheckpointPlacementListener checkpointPlacementListener;
+    private CheckpointBreakListener checkpointBreakListener;
+    private CityDormancyListener cityDormancyListener;
+    private ActivityTracker activityTracker;
+    private CombatTagTracker combatTagTracker;
+    private ActivityEventListener activityEventListener;
+    private CombatLogListener combatLogListener;
+    private LoginShieldListener loginShieldListener;
+    private WarLifecycleListener warLifecycleListener;
+    private WarProtectionListener warProtectionListener;
+    private CaptureTickListener captureTickListener;
+    private EvasionTickListener evasionTickListener;
+    private CityRenderEffectsListener cityRenderEffectsListener;
+    private ValidationSweepListener validationSweepListener;
+    private SettlementBackstopListener settlementBackstopListener;
+    private NegotiationDraftTracker negotiationDraftTracker;
+    private volatile boolean serverStopping;
+
+    // Forge only ever constructs one instance of a mod's main class; command handlers (which have no
+    // other way to reach this instance) resolve it through here.
+    private static NationWarsMod instance;
 
     public NationWarsMod(FMLJavaModLoadingContext context)
     {
+        instance = this;
+
         IEventBus modEventBus = context.getModEventBus();
 
-        // Register the commonSetup method for modloading
         modEventBus.addListener(this::commonSetup);
 
-        // Register the Deferred Register to the mod event bus so blocks get registered
-        BLOCKS.register(modEventBus);
-        // Register the Deferred Register to the mod event bus so items get registered
-        ITEMS.register(modEventBus);
-        // Register the Deferred Register to the mod event bus so tabs get registered
-        CREATIVE_MODE_TABS.register(modEventBus);
+        NationWarsBlocks.bootstrap();
+        NationWarsBlockEntities.bootstrap();
+        NationWarsMenus.bootstrap();
+        NationWarsPeaceClauses.bootstrap();
+        CheckpointReverters.bootstrap();
+        SettlementReverter.bootstrap();
+        NationWarsNetwork.register();
 
-        // Register ourselves for server and other game events we are interested in
+        BLOCKS.register(modEventBus);
+        ITEMS.register(modEventBus);
+        BLOCK_ENTITY_TYPES.register(modEventBus);
+        MENU_TYPES.register(modEventBus);
+        PEACE_CLAUSES.register(modEventBus);
+
         MinecraftForge.EVENT_BUS.register(this);
 
-        // Register the item to a creative tab
-        modEventBus.addListener(this::addCreative);
-
-        // Register our mod's ForgeConfigSpec so that Forge can create and load the config file for us
-        context.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
+        // Type.SERVER since these are gameplay constants synced from the server, not client preferences.
+        context.registerConfig(ModConfig.Type.SERVER, NationWarsConfig.SPEC);
     }
 
     private void commonSetup(final FMLCommonSetupEvent event)
     {
-        // Some common setup code
-        LOGGER.info("HELLO FROM COMMON SETUP");
-
-        if (Config.logDirtBlock)
-            LOGGER.info("DIRT BLOCK >> {}", ForgeRegistries.BLOCKS.getKey(Blocks.DIRT));
-
-        LOGGER.info(Config.magicNumberIntroduction + Config.magicNumber);
-
-        Config.items.forEach((item) -> LOGGER.info("ITEM >> {}", item.toString()));
+        OpacIntegration.verifyAvailable();
+        LOGGER.info("nationwars common setup complete; Open Parties and Claims found on the classpath");
     }
 
-    // Add the example block item to the building blocks tab
-    private void addCreative(BuildCreativeModeTabContentsEvent event)
+    private void registerDiagnosticLogging()
     {
-        if (event.getTabKey() == CreativeModeTabs.BUILDING_BLOCKS)
-            event.accept(EXAMPLE_BLOCK_ITEM);
+        // ModConfig.Type.SERVER is per-world and is only loaded once a server actually starts, so
+        // this can't run any earlier than ServerStartingEvent — FMLCommonSetupEvent fires before any
+        // world exists and every NationWarsConfig getter below would throw.
+        final Level defaultLevel = parseLevel(NationWarsConfig.LOGGING_DEFAULT.get(), Level.INFO);
+        final Level consoleLevel = parseLevel(NationWarsConfig.LOG_TO_SERVER_CONSOLE.get(), Level.WARN);
+
+        final Map<String, Level> categoryLevels = new LinkedHashMap<>();
+        NationWarsConfig.loggingCategories.forEach((category, levelName) -> categoryLevels.put(category, parseLevel(levelName, defaultLevel)));
+
+        NationWarsLogging.register(
+                NationWarsConfig.LOG_FILE_SIZE_MB.get(),
+                NationWarsConfig.LOG_FILE_HISTORY.get(),
+                consoleLevel,
+                categoryLevels,
+                defaultLevel);
     }
 
-    // You can use SubscribeEvent and let the Event Bus discover methods to call
-    @SubscribeEvent
-    public void onServerStarting(ServerStartingEvent event)
+    private static Level parseLevel(final String name, final Level fallback)
     {
-        // Do something when the server starts
-        LOGGER.info("HELLO from server starting");
-    }
-
-    // You can use EventBusSubscriber to automatically register all static methods in the class annotated with @SubscribeEvent
-    @Mod.EventBusSubscriber(modid = MODID, bus = Mod.EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
-    public static class ClientModEvents
-    {
-        @SubscribeEvent
-        public static void onClientSetup(FMLClientSetupEvent event)
+        final Level level = Level.toLevel(name, null);
+        if (level == null)
         {
-            // Some client setup code
-            LOGGER.info("HELLO FROM CLIENT SETUP");
-            LOGGER.info("MINECRAFT NAME >> {}", Minecraft.getInstance().getUser().getName());
+            LOGGER.warn("nationwars config has an invalid log level '{}'; using {} instead", name, fallback);
+            return fallback;
         }
+        return level;
+    }
+
+    @SubscribeEvent
+    public void onServerStarting(final ServerStartingEvent event)
+    {
+        registerDiagnosticLogging();
+
+        final int lockStripes = NationWarsConfig.LOCK_STRIPES.get();
+        final int workerThreads = WorkerPool.resolveThreadCount(NationWarsConfig.WORKER_THREADS.get());
+        final int workerQueueCapacity = NationWarsConfig.WORKER_QUEUE_CAPACITY.get();
+
+        nationRegistry = new NationRegistry(lockStripes);
+        workerPool = new WorkerPool(workerThreads, workerQueueCapacity);
+        writerThread = new WriterThread(WRITER_QUEUE_CAPACITY);
+
+        columnRegistry = new ColumnRegistry();
+        columnProtectionListener = new ColumnProtectionListener(columnRegistry);
+        MinecraftForge.EVENT_BUS.register(columnProtectionListener);
+
+        cityFoundingListener = new CityFoundingListener();
+        MinecraftForge.EVENT_BUS.register(cityFoundingListener);
+
+        captureTickListener = new CaptureTickListener();
+        MinecraftForge.EVENT_BUS.register(captureTickListener);
+
+        settlementBackstopListener = new SettlementBackstopListener();
+        MinecraftForge.EVENT_BUS.register(settlementBackstopListener);
+        negotiationDraftTracker = new NegotiationDraftTracker();
+
+        final CheckpointMoveGrace checkpointMoveGrace = new CheckpointMoveGrace();
+        checkpointPlacementListener = new CheckpointPlacementListener(checkpointMoveGrace);
+        MinecraftForge.EVENT_BUS.register(checkpointPlacementListener);
+        checkpointBreakListener = new CheckpointBreakListener(checkpointMoveGrace, captureTickListener);
+        MinecraftForge.EVENT_BUS.register(checkpointBreakListener);
+        cityDormancyListener = new CityDormancyListener();
+        MinecraftForge.EVENT_BUS.register(cityDormancyListener);
+
+        serverStopping = false;
+        activityTracker = new ActivityTracker();
+        combatTagTracker = new CombatTagTracker();
+        activityEventListener = new ActivityEventListener(activityTracker);
+        MinecraftForge.EVENT_BUS.register(activityEventListener);
+        combatLogListener = new CombatLogListener(combatTagTracker);
+        MinecraftForge.EVENT_BUS.register(combatLogListener);
+        loginShieldListener = new LoginShieldListener(activityTracker);
+        MinecraftForge.EVENT_BUS.register(loginShieldListener);
+        warLifecycleListener = new WarLifecycleListener();
+        MinecraftForge.EVENT_BUS.register(warLifecycleListener);
+        warProtectionListener = new WarProtectionListener();
+        MinecraftForge.EVENT_BUS.register(warProtectionListener);
+        evasionTickListener = new EvasionTickListener();
+        MinecraftForge.EVENT_BUS.register(evasionTickListener);
+        cityRenderEffectsListener = new CityRenderEffectsListener();
+        MinecraftForge.EVENT_BUS.register(cityRenderEffectsListener);
+        validationSweepListener = new ValidationSweepListener();
+        MinecraftForge.EVENT_BUS.register(validationSweepListener);
+
+        auditDir = event.getServer().getWorldPath(LevelResource.ROOT).resolve("data").resolve("nationwars-audit");
+        auditWriter = new AuditWriter(auditDir, writerThread);
+        auditIndex = new AuditIndex();
+        final int auditRetentionDays = NationWarsConfig.AUDIT_RETENTION_DAYS.get();
+        auditIndex.rebuildAsync(auditDir, auditRetentionDays, auditWriter.fileLock(), workerPool, event.getServer());
+
+        auditWriter.append(AuditEntry.of(null, "SYSTEM", null, ActorRole.SYSTEM, AuditSource.AUTO,
+                ResourceLocation.tryBuild(MODID, "diagnostic_synthetic_entry"), List.of(),
+                new CompoundTag(), new CompoundTag(), false));
+
+        persistenceIo = new PersistenceIo(writerThread);
+        savedDataFile = event.getServer().getWorldPath(LevelResource.ROOT).resolve("data").resolve("nationwars.dat").toFile();
+        try
+        {
+            savedData = PersistenceIo.load(savedDataFile);
+        }
+        catch (final IOException e)
+        {
+            throw new UncheckedIOException("failed to load " + savedDataFile, e);
+        }
+        savedData.applyTo(nationRegistry);
+
+        LOGGER.info("nationwars starting; lockStripes={}, workerThreads={}, workerQueueCapacity={}, "
+                        + "savedDataSchemaVersion={}, auditRetentionDays={}, citiesLoaded={}, warsLoaded={}",
+                lockStripes, workerThreads, workerQueueCapacity, NationWarsSavedData.CURRENT_SCHEMA_VERSION, auditRetentionDays,
+                nationRegistry.cities().size(), nationRegistry.wars().size());
+    }
+
+    @SubscribeEvent
+    public void onServerStopping(final ServerStoppingEvent event)
+    {
+        // Set first: ServerStoppingEvent fires before players are kicked, so CombatLogListener's
+        // logout handler can already see this when combatLogGraceOnServerStop applies.
+        serverStopping = true;
+
+        // AuditWriter has nothing to flush at shutdown: every append() already fully writes and
+        // closes its day file synchronously on the writer thread by the time it returns.
+        auditWriter = null;
+        auditIndex = null;
+        auditDir = null;
+        if (columnProtectionListener != null)
+        {
+            MinecraftForge.EVENT_BUS.unregister(columnProtectionListener);
+            columnProtectionListener = null;
+        }
+        if (cityFoundingListener != null)
+        {
+            MinecraftForge.EVENT_BUS.unregister(cityFoundingListener);
+            cityFoundingListener = null;
+        }
+        if (checkpointPlacementListener != null)
+        {
+            MinecraftForge.EVENT_BUS.unregister(checkpointPlacementListener);
+            checkpointPlacementListener = null;
+        }
+        if (checkpointBreakListener != null)
+        {
+            MinecraftForge.EVENT_BUS.unregister(checkpointBreakListener);
+            checkpointBreakListener = null;
+        }
+        if (cityDormancyListener != null)
+        {
+            MinecraftForge.EVENT_BUS.unregister(cityDormancyListener);
+            cityDormancyListener = null;
+        }
+        if (activityEventListener != null)
+        {
+            MinecraftForge.EVENT_BUS.unregister(activityEventListener);
+            activityEventListener = null;
+        }
+        if (combatLogListener != null)
+        {
+            MinecraftForge.EVENT_BUS.unregister(combatLogListener);
+            combatLogListener = null;
+        }
+        if (loginShieldListener != null)
+        {
+            MinecraftForge.EVENT_BUS.unregister(loginShieldListener);
+            loginShieldListener = null;
+        }
+        if (warLifecycleListener != null)
+        {
+            MinecraftForge.EVENT_BUS.unregister(warLifecycleListener);
+            warLifecycleListener = null;
+        }
+        if (warProtectionListener != null)
+        {
+            MinecraftForge.EVENT_BUS.unregister(warProtectionListener);
+            warProtectionListener = null;
+        }
+        if (captureTickListener != null)
+        {
+            MinecraftForge.EVENT_BUS.unregister(captureTickListener);
+            captureTickListener = null;
+        }
+        if (evasionTickListener != null)
+        {
+            MinecraftForge.EVENT_BUS.unregister(evasionTickListener);
+            evasionTickListener = null;
+        }
+        if (cityRenderEffectsListener != null)
+        {
+            MinecraftForge.EVENT_BUS.unregister(cityRenderEffectsListener);
+            cityRenderEffectsListener = null;
+        }
+        if (validationSweepListener != null)
+        {
+            MinecraftForge.EVENT_BUS.unregister(validationSweepListener);
+            validationSweepListener = null;
+        }
+        if (settlementBackstopListener != null)
+        {
+            MinecraftForge.EVENT_BUS.unregister(settlementBackstopListener);
+            settlementBackstopListener = null;
+        }
+        negotiationDraftTracker = null;
+        activityTracker = null;
+        combatTagTracker = null;
+        columnRegistry = null;
+        // Save before closing the writer thread: close() drains its queue, so a save enqueued here is
+        // guaranteed to have actually landed on disk by the time the writer thread stops.
+        forceSave();
+        if (writerThread != null)
+        {
+            writerThread.close();
+            writerThread = null;
+        }
+        if (workerPool != null)
+        {
+            workerPool.close();
+            workerPool = null;
+        }
+        savedData = null;
+        persistenceIo = null;
+        savedDataFile = null;
+        nationRegistry = null;
+    }
+
+    /**
+     * Snapshots the live registry into the attached save data and queues the encode-and-write on the
+     * writer thread. Called at every force-save trigger the spec names (war phase transitions,
+     * occupations, settlements, disbandments) — the moments losing unsaved progress would actually
+     * matter — rather than relying solely on some periodic autosave.
+     */
+    public void forceSave()
+    {
+        if (savedData != null && nationRegistry != null && persistenceIo != null)
+        {
+            savedData.syncFromRegistry(nationRegistry);
+            persistenceIo.save(savedData, savedDataFile);
+        }
+    }
+
+    public static NationWarsMod get()
+    {
+        return instance;
+    }
+
+    public AuditIndex getAuditIndex()
+    {
+        return auditIndex;
+    }
+
+    public AuditWriter getAuditWriter()
+    {
+        return auditWriter;
+    }
+
+    public Path getAuditDir()
+    {
+        return auditDir;
+    }
+
+    public WorkerPool getWorkerPool()
+    {
+        return workerPool;
+    }
+
+    public WriterThread getWriterThread()
+    {
+        return writerThread;
+    }
+
+    public ColumnRegistry getColumnRegistry()
+    {
+        return columnRegistry;
+    }
+
+    public NationRegistry getNationRegistry()
+    {
+        return nationRegistry;
+    }
+
+    public ActivityTracker getActivityTracker()
+    {
+        return activityTracker;
+    }
+
+    public CombatTagTracker getCombatTagTracker()
+    {
+        return combatTagTracker;
+    }
+
+    public boolean isServerStopping()
+    {
+        return serverStopping;
+    }
+
+    public NegotiationDraftTracker getNegotiationDraftTracker()
+    {
+        return negotiationDraftTracker;
+    }
+
+    public CaptureTickListener getCaptureTickListener()
+    {
+        return captureTickListener;
+    }
+
+    public WarLifecycleListener getWarLifecycleListener()
+    {
+        return warLifecycleListener;
+    }
+
+    public EvasionTickListener getEvasionTickListener()
+    {
+        return evasionTickListener;
+    }
+
+    public ValidationSweepListener getValidationSweepListener()
+    {
+        return validationSweepListener;
     }
 }

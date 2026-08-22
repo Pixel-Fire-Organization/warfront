@@ -1,0 +1,394 @@
+package org.pixelfire.nationwars.command;
+
+import com.mojang.brigadier.arguments.LongArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.UuidArgument;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraftforge.event.RegisterCommandsEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.server.permission.PermissionAPI;
+import org.pixelfire.nationwars.NationWarsMod;
+import org.pixelfire.nationwars.config.NationWarsConfig;
+import org.pixelfire.nationwars.state.Coalition;
+import org.pixelfire.nationwars.state.CounterOffensiveFailureReason;
+import org.pixelfire.nationwars.state.NationRegistry;
+import org.pixelfire.nationwars.state.War;
+import org.pixelfire.nationwars.state.WarDeclarationFailureReason;
+import org.pixelfire.nationwars.state.WarJoinFailureReason;
+import org.pixelfire.nationwars.state.WarOutcome;
+import org.pixelfire.nationwars.state.WarPhase;
+import org.pixelfire.nationwars.settlement.SurrenderService;
+import org.pixelfire.nationwars.war.CounterOffensiveService;
+import org.pixelfire.nationwars.war.WarDeclarationService;
+import org.pixelfire.nationwars.war.WarJoinService;
+import org.pixelfire.nationwars.war.WarTermination;
+import org.pixelfire.nationwars.world.OpacNations;
+import org.pixelfire.nationwars.world.OpacNations.NationSnapshot;
+
+import java.util.HashSet;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+
+/**
+ * {@code /war declare|withdraw|join|counteroffensive|surrender|status|list} and the staff cancel
+ * command. Negotiation and staff-imposed settlement aren't implemented here — they need the async
+ * ratification flow (Stage 19).
+ */
+@Mod.EventBusSubscriber(modid = NationWarsMod.MODID)
+public final class NationWarsWarCommands
+{
+    private NationWarsWarCommands()
+    {
+    }
+
+    @SubscribeEvent
+    public static void register(final RegisterCommandsEvent event)
+    {
+        event.getDispatcher().register(Commands.literal("war")
+                .then(Commands.literal("declare")
+                        .then(Commands.argument("nation", StringArgumentType.greedyString())
+                                .executes(NationWarsWarCommands::declare)))
+                .then(Commands.literal("withdraw")
+                        .then(Commands.argument("warId", UuidArgument.uuid())
+                                .executes(NationWarsWarCommands::withdraw)))
+                .then(Commands.literal("join")
+                        .then(Commands.argument("warId", UuidArgument.uuid())
+                                .then(Commands.literal("attackers")
+                                        .executes(NationWarsWarCommands::join))))
+                .then(Commands.literal("counteroffensive")
+                        .then(Commands.argument("warId", UuidArgument.uuid())
+                                .executes(NationWarsWarCommands::counterOffensive)))
+                .then(Commands.literal("surrender")
+                        .then(Commands.argument("warId", UuidArgument.uuid())
+                                .executes(NationWarsWarCommands::surrender)))
+                .then(Commands.literal("status")
+                        .executes(NationWarsWarCommands::statusList)
+                        .then(Commands.argument("warId", UuidArgument.uuid())
+                                .executes(NationWarsWarCommands::status)))
+                .then(Commands.literal("list").executes(NationWarsWarCommands::statusList)));
+
+        event.getDispatcher().register(Commands.literal("nationwars")
+                .then(Commands.literal("staff")
+                        .then(Commands.literal("war")
+                                .requires(NationWarsWarCommands::hasStaffWarPermission)
+                                .then(Commands.literal("cancel")
+                                        .then(Commands.argument("warId", UuidArgument.uuid())
+                                                .executes(NationWarsWarCommands::staffCancel)))
+                                .then(Commands.literal("extend")
+                                        .then(Commands.argument("warId", UuidArgument.uuid())
+                                                .then(Commands.argument("hours", LongArgumentType.longArg(1))
+                                                        .executes(NationWarsWarCommands::staffExtend))))
+                                .then(Commands.literal("coalition")
+                                        .then(Commands.literal("add")
+                                                .then(Commands.argument("warId", UuidArgument.uuid())
+                                                        .then(Commands.argument("nation", StringArgumentType.string())
+                                                                .then(Commands.argument("side", StringArgumentType.word())
+                                                                        .executes(ctx -> staffCoalitionChange(ctx, true))))))
+                                        .then(Commands.literal("remove")
+                                                .then(Commands.argument("warId", UuidArgument.uuid())
+                                                        .then(Commands.argument("nation", StringArgumentType.string())
+                                                                .then(Commands.argument("side", StringArgumentType.word())
+                                                                        .executes(ctx -> staffCoalitionChange(ctx, false))))))))));
+    }
+
+    private static boolean hasStaffWarPermission(final CommandSourceStack source)
+    {
+        final ServerPlayer player = source.getPlayer();
+        if (player != null)
+        {
+            return PermissionAPI.getPermission(player, NationWarsPermissions.STAFF_WAR);
+        }
+        return source.hasPermission(NationWarsConfig.STAFF_PERMISSION_LEVEL.get());
+    }
+
+    private static int declare(final CommandContext<CommandSourceStack> context)
+    {
+        final ServerPlayer player = context.getSource().getPlayer();
+        if (player == null)
+        {
+            context.getSource().sendFailure(Component.literal("Only a player may declare war."));
+            return 0;
+        }
+        final String targetName = StringArgumentType.getString(context, "nation");
+        final UUID targetId = OpacNations.findNationByName(context.getSource().getServer(), targetName);
+
+        final Optional<WarDeclarationFailureReason> failure =
+                WarDeclarationService.declare(context.getSource().getServer(), player, targetId);
+        if (failure.isPresent())
+        {
+            context.getSource().sendFailure(Component.literal(failure.get().message()));
+            return 0;
+        }
+        context.getSource().sendSuccess(() -> Component.literal("War declared on " + targetName + "."), true);
+        return 1;
+    }
+
+    private static int withdraw(final CommandContext<CommandSourceStack> context)
+    {
+        final ServerPlayer player = context.getSource().getPlayer();
+        final UUID warId = UuidArgument.getUuid(context, "warId");
+        final NationRegistry registry = NationWarsMod.get().getNationRegistry();
+        final War war = registry.wars().get(warId);
+        if (player == null || war == null)
+        {
+            context.getSource().sendFailure(Component.literal("No such war."));
+            return 0;
+        }
+        final NationSnapshot nation = OpacNations.nationOf(context.getSource().getServer(), player);
+        if (nation == null || !nation.isOwner() || !war.attackers().primaryNationId().equals(nation.nationId()))
+        {
+            context.getSource().sendFailure(Component.literal("Only the attacking nation's leader may withdraw from this war."));
+            return 0;
+        }
+        WarTermination.conclude(registry, war, WarOutcome.ATTACKER_WITHDRAWAL, System.currentTimeMillis());
+        context.getSource().sendSuccess(() -> Component.literal("Withdrew from the war."), true);
+        return 1;
+    }
+
+    private static int join(final CommandContext<CommandSourceStack> context)
+    {
+        final ServerPlayer player = context.getSource().getPlayer();
+        final UUID warId = UuidArgument.getUuid(context, "warId");
+        final War war = NationWarsMod.get().getNationRegistry().wars().get(warId);
+        if (player == null || war == null)
+        {
+            context.getSource().sendFailure(Component.literal("No such war."));
+            return 0;
+        }
+        final Optional<WarJoinFailureReason> failure = WarJoinService.join(context.getSource().getServer(), player, war);
+        if (failure.isPresent())
+        {
+            context.getSource().sendFailure(Component.literal(failure.get().message()));
+            return 0;
+        }
+        context.getSource().sendSuccess(() -> Component.literal("Joined the war as an attacker."), true);
+        return 1;
+    }
+
+    private static int counterOffensive(final CommandContext<CommandSourceStack> context)
+    {
+        if (!NationWarsConfig.ALLOW_COUNTER_OFFENSIVE.get())
+        {
+            context.getSource().sendFailure(Component.literal("Counteroffensives are disabled on this server."));
+            return 0;
+        }
+        final ServerPlayer player = context.getSource().getPlayer();
+        final UUID warId = UuidArgument.getUuid(context, "warId");
+        final War war = NationWarsMod.get().getNationRegistry().wars().get(warId);
+        if (player == null || war == null)
+        {
+            context.getSource().sendFailure(Component.literal("No such war."));
+            return 0;
+        }
+        final NationSnapshot nation = OpacNations.nationOf(context.getSource().getServer(), player);
+        if (nation == null || !nation.isOwner() || !war.defenders().primaryNationId().equals(nation.nationId()))
+        {
+            context.getSource().sendFailure(Component.literal("Only the defending nation's leader may declare a counteroffensive."));
+            return 0;
+        }
+        final Optional<CounterOffensiveFailureReason> failure = CounterOffensiveService.declare(context.getSource().getServer(), war);
+        if (failure.isPresent())
+        {
+            context.getSource().sendFailure(Component.literal(failure.get().message()));
+            return 0;
+        }
+        context.getSource().sendSuccess(() -> Component.literal("Counteroffensive declared. The war is now two-front."), true);
+        return 1;
+    }
+
+    private static int surrender(final CommandContext<CommandSourceStack> context)
+    {
+        final ServerPlayer player = context.getSource().getPlayer();
+        final UUID warId = UuidArgument.getUuid(context, "warId");
+        final NationRegistry registry = NationWarsMod.get().getNationRegistry();
+        final War war = registry.wars().get(warId);
+        if (player == null || war == null)
+        {
+            context.getSource().sendFailure(Component.literal("No such war."));
+            return 0;
+        }
+        final NationSnapshot nation = OpacNations.nationOf(context.getSource().getServer(), player);
+        if (nation == null || !nation.isOwner())
+        {
+            context.getSource().sendFailure(Component.literal("Only a nation's leader may surrender it in this war."));
+            return 0;
+        }
+        final Optional<String> failure = SurrenderService.surrender(context.getSource().getServer(), registry, war, nation.nationId());
+        if (failure.isPresent())
+        {
+            context.getSource().sendFailure(Component.literal(failure.get()));
+            return 0;
+        }
+        context.getSource().sendSuccess(() -> Component.literal("Surrendered."), true);
+        return 1;
+    }
+
+    private static int staffCancel(final CommandContext<CommandSourceStack> context)
+    {
+        final UUID warId = UuidArgument.getUuid(context, "warId");
+        final NationRegistry registry = NationWarsMod.get().getNationRegistry();
+        final War war = registry.wars().get(warId);
+        if (war == null)
+        {
+            context.getSource().sendFailure(Component.literal("No such war."));
+            return 0;
+        }
+        WarTermination.conclude(registry, war, WarOutcome.STAFF_CANCEL, System.currentTimeMillis());
+        context.getSource().sendSuccess(() -> Component.literal("War " + warId + " cancelled by staff."), true);
+        return 1;
+    }
+
+    private static int staffExtend(final CommandContext<CommandSourceStack> context)
+    {
+        final UUID warId = UuidArgument.getUuid(context, "warId");
+        final NationRegistry registry = NationWarsMod.get().getNationRegistry();
+        final War war = registry.wars().get(warId);
+        if (war == null)
+        {
+            context.getSource().sendFailure(Component.literal("No such war."));
+            return 0;
+        }
+        final long hours = LongArgumentType.getLong(context, "hours");
+        final long maxWarExpiresAt = war.declaredAt() + NationWarsConfig.WAR_DURATION_MAX_SECONDS.get() * 1000L;
+        final long newExpiresAt = Math.min(war.warExpiresAt() + hours * 3_600_000L, maxWarExpiresAt);
+
+        registry.stripedLocks().withLocks(() -> registry.wars().put(warId, new War(war.warId(), war.attackers(), war.defenders(),
+                war.phase(), war.declaredAt(), war.activeAt(), newExpiresAt, war.targetCityIds(), war.occupiedCityIds(),
+                war.warScore(), war.suspendedSince(), war.contestedTimeMs(), war.settlementDeadline(), war.outcome(),
+                war.memberTargetableAt())), warId);
+
+        context.getSource().sendSuccess(() -> Component.literal("War " + warId + " extended to " + newExpiresAt
+                + " (clamped to warDurationMax)."), true);
+        return 1;
+    }
+
+    private static int staffCoalitionChange(final CommandContext<CommandSourceStack> context, final boolean adding)
+    {
+        final UUID warId = UuidArgument.getUuid(context, "warId");
+        final NationRegistry registry = NationWarsMod.get().getNationRegistry();
+        final War war = registry.wars().get(warId);
+        if (war == null)
+        {
+            context.getSource().sendFailure(Component.literal("No such war."));
+            return 0;
+        }
+        final String nationName = StringArgumentType.getString(context, "nation");
+        final UUID nationId = OpacNations.findNationByName(context.getSource().getServer(), nationName);
+        if (nationId == null)
+        {
+            context.getSource().sendFailure(Component.literal("No such nation."));
+            return 0;
+        }
+        final String side = StringArgumentType.getString(context, "side");
+        final boolean isAttackerSide;
+        if (side.equalsIgnoreCase("attackers"))
+        {
+            isAttackerSide = true;
+        }
+        else if (side.equalsIgnoreCase("defenders"))
+        {
+            isAttackerSide = false;
+        }
+        else
+        {
+            context.getSource().sendFailure(Component.literal("side must be 'attackers' or 'defenders'."));
+            return 0;
+        }
+
+        final Coalition target = isAttackerSide ? war.attackers() : war.defenders();
+        if (!adding && nationId.equals(target.primaryNationId()))
+        {
+            context.getSource().sendFailure(Component.literal("Cannot remove the primary nation from a coalition; cancel or finalize the war instead."));
+            return 0;
+        }
+
+        final Set<UUID> members = new HashSet<>(target.members());
+        if (adding)
+        {
+            members.add(nationId);
+        }
+        else
+        {
+            members.remove(nationId);
+        }
+        final Coalition updated = new Coalition(Set.copyOf(members), target.pendingMembers(), target.primaryNationId());
+
+        registry.stripedLocks().withLocks(() -> registry.wars().put(warId, new War(war.warId(),
+                isAttackerSide ? updated : war.attackers(), isAttackerSide ? war.defenders() : updated,
+                war.phase(), war.declaredAt(), war.activeAt(), war.warExpiresAt(), war.targetCityIds(), war.occupiedCityIds(),
+                war.warScore(), war.suspendedSince(), war.contestedTimeMs(), war.settlementDeadline(), war.outcome(),
+                war.memberTargetableAt())), warId, nationId);
+
+        context.getSource().sendSuccess(() -> Component.literal((adding ? "Added " : "Removed ") + nationName + " "
+                + (adding ? "to" : "from") + " the " + side + " coalition of war " + warId + "."), true);
+        return 1;
+    }
+
+    private static int status(final CommandContext<CommandSourceStack> context)
+    {
+        final UUID warId = UuidArgument.getUuid(context, "warId");
+        final War war = NationWarsMod.get().getNationRegistry().wars().get(warId);
+        if (war == null)
+        {
+            context.getSource().sendFailure(Component.literal("No such war."));
+            return 0;
+        }
+
+        final boolean suspended = war.suspendedSince() > 0L;
+        final long now = System.currentTimeMillis();
+        final long remainingMs = Math.max(0L, war.warExpiresAt() - now);
+        context.getSource().sendSuccess(() -> Component.literal(describe(war) + (suspended ? " [SUSPENDED]" : " [ACTIVE]")
+                + " — deadline in " + (remainingMs / 86_400_000L) + "d " + ((remainingMs / 3_600_000L) % 24) + "h"), false);
+        context.getSource().sendSuccess(() -> Component.literal("  Target cities occupied: " + war.occupiedCityIds().size()
+                + "/" + war.targetCityIds().size()), false);
+        context.getSource().sendSuccess(() -> Component.literal("  Attackers (" + war.attackers().members().size() + "): "
+                + war.attackers().members()), false);
+        context.getSource().sendSuccess(() -> Component.literal("  Defenders (" + war.defenders().members().size() + "): "
+                + war.defenders().members()), false);
+        if (war.phase() == WarPhase.SETTLEMENT && war.settlementDeadline() > 0L)
+        {
+            final long settlementRemainingMs = Math.max(0L, war.settlementDeadline() - now);
+            context.getSource().sendSuccess(() -> Component.literal("  Settlement window: " + (settlementRemainingMs / 3_600_000L)
+                    + "h remaining — see /war negotiate " + war.warId() + " review"), false);
+        }
+
+        final ServerPlayer player = context.getSource().getPlayer();
+        if (player != null)
+        {
+            final NationSnapshot nation = OpacNations.nationOf(context.getSource().getServer(), player);
+            if (nation != null && war.warScore().containsKey(nation.nationId()))
+            {
+                context.getSource().sendSuccess(() -> Component.literal("  Your nation's war score: "
+                        + war.warScore().getOrDefault(nation.nationId(), 0L)), false);
+            }
+        }
+        return 1;
+    }
+
+    private static int statusList(final CommandContext<CommandSourceStack> context)
+    {
+        final var wars = NationWarsMod.get().getNationRegistry().wars().values();
+        if (wars.isEmpty())
+        {
+            context.getSource().sendSuccess(() -> Component.literal("No wars recorded."), false);
+            return 1;
+        }
+        for (final War war : wars)
+        {
+            context.getSource().sendSuccess(() -> Component.literal(describe(war)), false);
+        }
+        return wars.size();
+    }
+
+    private static String describe(final War war)
+    {
+        return war.warId() + ": " + war.attackers().primaryNationId() + " vs " + war.defenders().primaryNationId()
+                + " [" + war.phase() + (war.outcome() != null ? ", " + war.outcome() : "") + "]";
+    }
+}

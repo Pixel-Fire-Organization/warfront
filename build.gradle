@@ -136,6 +136,12 @@ repositories {
     // Put repositories for dependencies here
     // ForgeGradle automatically adds the Forge maven and Maven Central for you
 
+    // Open Parties and Claims (OPAC) is published on Modrinth's maven.
+    maven {
+        name = 'Modrinth'
+        url = 'https://api.modrinth.com/maven'
+    }
+
     // If you have mod jar dependencies in ./libs, you can declare them as a repository like so.
     // See https://docs.gradle.org/current/userguide/declaring_repositories.html#sub:flat_dir_resolver
     // flatDir {
@@ -151,6 +157,12 @@ dependencies {
     // then special handling is done to allow a setup of a vanilla dependency without the use of an external repository.
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
 
+    // Open Parties and Claims: a hard runtime dependency, also needed at compile time for the
+    // party/claims API this mod builds on. fg.deobf() remaps the published (SRG-named) jar back to
+    // this project's mapping channel, and `implementation` puts it on the dev-run classpath so
+    // runClient/runServer/runGameTestServer see it as an installed mod with no manual jar drop-in needed.
+    implementation fg.deobf("maven.modrinth:open-parties-and-claims:forge-${minecraft_version}-${opac_version}")
+
     // Example mod dependency with JEI - using fg.deobf() ensures the dependency is remapped to your development mappings
     // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
     // compileOnly fg.deobf("mezz.jei:jei-${mc_version}-common-api:${jei_version}")
@@ -165,6 +177,16 @@ dependencies {
     // For more info:
     // http://www.gradle.org/docs/current/userguide/artifact_dependencies_tutorial.html
     // http://www.gradle.org/docs/current/userguide/dependency_management.html
+
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testImplementation 'org.mockito:mockito-core:5.12.0'
+    testImplementation 'org.mockito:mockito-junit-jupiter:5.12.0'
+}
+
+test {
+    useJUnitPlatform()
 }
 
 // This block of code expands all declared replace properties in the specified resource targets.
@@ -178,6 +200,7 @@ tasks.named('processResources', ProcessResources).configure {
             loader_version_range: loader_version_range,
             mod_id: mod_id, mod_name: mod_name, mod_license: mod_license, mod_version: project.version.toString(),
             mod_authors: mod_authors, mod_description: mod_description,
+            opac_mod_id: opac_mod_id, opac_version_range: opac_version_range,
     ]
     inputs.properties replaceProperties
 

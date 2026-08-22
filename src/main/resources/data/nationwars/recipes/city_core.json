@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "GOG",
+    "OBO",
+    "GGN"
+  ],
+  "key": {
+    "G": { "item": "minecraft:gold_block" },
+    "O": { "item": "minecraft:obsidian" },
+    "B": { "item": "minecraft:beacon" },
+    "N": { "item": "minecraft:nether_star" }
+  },
+  "result": {
+    "item": "nationwars:city_core",
+    "count": 1
+  }
+}
