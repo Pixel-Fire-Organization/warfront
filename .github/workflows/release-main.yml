@@ -43,7 +43,33 @@ jobs:
       - name: Compute next version
         id: version
         run: |
-          VERSION=$(bash .github/scripts/next-version.sh)
+          # dev -> main lands as a single squash-merged commit, so the individual feat:/fix:
+          # subjects that decided dev's pre-release bump aren't visible here anymore. Promote the
+          # latest dev pre-release's X.Y.Z as-is (dropping -dev.N) so main matches dev 1:1, rather
+          # than re-deriving the bump from the squash commit's message (which is usually neither
+          # feat: nor fix:, and would silently fall back to a patch bump). Only fall back to
+          # next-version.sh's own scan when there's no dev pre-release ahead of the last release,
+          # e.g. a hotfix committed straight to main.
+          LAST_RELEASE_TAG=$( { git tag -l 'v[0-9]*.[0-9]*.[0-9]*' | grep -vE -- '-dev\.' | sort -V | tail -n1; } || true)
+          LAST_RELEASE_TAG=${LAST_RELEASE_TAG:-v0.0.0}
+          LAST_RELEASE_VERSION=${LAST_RELEASE_TAG#v}
+
+          LATEST_DEV_TAG=$( { git tag -l 'v[0-9]*.[0-9]*.[0-9]*-dev.*' | sort -V | tail -n1; } || true)
+
+          VERSION=""
+          if [ -n "$LATEST_DEV_TAG" ]; then
+              DEV_VERSION=${LATEST_DEV_TAG#v}
+              DEV_RELEASE_VERSION=${DEV_VERSION%-dev.*}
+              HIGHER=$(printf '%s\n%s\n' "$LAST_RELEASE_VERSION" "$DEV_RELEASE_VERSION" | sort -V | tail -n1)
+              if [ "$HIGHER" = "$DEV_RELEASE_VERSION" ] && [ "$DEV_RELEASE_VERSION" != "$LAST_RELEASE_VERSION" ]; then
+                  VERSION="$DEV_RELEASE_VERSION"
+              fi
+          fi
+
+          if [ -z "$VERSION" ]; then
+              VERSION=$(bash .github/scripts/next-version.sh)
+          fi
+
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Tag release

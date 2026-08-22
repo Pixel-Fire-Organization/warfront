@@ -22,7 +22,13 @@ else
     RANGE="HEAD"
 fi
 
-if git log "$RANGE" --pretty=%s | grep -qE '^feat(\(.+\))?:'; then
+# Captured into a variable rather than piped straight into `grep -q`: with set -o pipefail, grep -q
+# exits (and closes its end of the pipe) the instant it finds a match, which can SIGPIPE a still-writing
+# git log and make the pipeline report non-zero even though grep matched — silently taking the else
+# branch. Grepping a variable can't race like that.
+COMMIT_SUBJECTS=$(git log "$RANGE" --pretty=%s)
+
+if grep -qE '^feat(\(.+\))?:' <<< "$COMMIT_SUBJECTS"; then
     MINOR=$((MINOR + 1))
     PATCH=0
 else
