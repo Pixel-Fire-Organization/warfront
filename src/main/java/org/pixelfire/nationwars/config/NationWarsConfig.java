@@ -45,6 +45,7 @@ public final class NationWarsConfig
     public static final ForgeConfigSpec.IntValue CHECKPOINT_MOVE_GRACE_SECONDS;
     public static final ForgeConfigSpec.IntValue CHECKPOINT_RESPAWN_DELAY_SECONDS;
     public static final ForgeConfigSpec.BooleanValue ALLOW_FOUNDING_DURING_WAR;
+    public static final ForgeConfigSpec.ConfigValue<List<? extends String>> CITY_DEFAULT_NAMES;
 
     // ---- Tiers and payment --------------------------------------------------------------------
 
@@ -57,6 +58,7 @@ public final class NationWarsConfig
     public static final ForgeConfigSpec.ConfigValue<String> CITY_FOUND_RANK;
     public static final ForgeConfigSpec.ConfigValue<String> CHECKPOINT_PLACE_RANK;
     public static final ForgeConfigSpec.ConfigValue<String> CITY_UPGRADE_RANK;
+    public static final ForgeConfigSpec.ConfigValue<String> CITY_RENAME_RANK;
     public static final ForgeConfigSpec.BooleanValue ALLIES_CAN_PLACE_CHECKPOINTS;
     public static final ForgeConfigSpec.BooleanValue ALLOW_UPGRADE_DURING_WAR;
     public static final ForgeConfigSpec.IntValue STAFF_PERMISSION_LEVEL;
@@ -173,7 +175,7 @@ public final class NationWarsConfig
         MIN_CORE_DISTANCE = BUILDER.comment(
                         "Minimum horizontal distance, in blocks, required between two City Cores. Too small a value relative to "
                                 + "the largest tier's radius is corrected automatically at startup (see the warning if that happens).")
-                .defineInRange("minCoreDistance", 192, 1, Integer.MAX_VALUE);
+                .defineInRange("minCoreDistance", 2100, 1, Integer.MAX_VALUE);
         MAX_CITIES_PER_NATION = BUILDER.comment("Hard cap on how many cities one nation may found in total.")
                 .defineInRange("maxCitiesPerNation", 5, 1, Integer.MAX_VALUE);
         MAX_CITIES_PER_MEMBER = BUILDER.comment(
@@ -207,13 +209,25 @@ public final class NationWarsConfig
         ALLOW_FOUNDING_DURING_WAR = BUILDER.comment(
                         "If false, a nation currently in an unsettled war cannot found a new city.")
                 .define("allowFoundingDuringWar", false);
+        CITY_DEFAULT_NAMES = BUILDER.comment(
+                        "Candidate names offered to a newly founded city, tried in order until an unclaimed (case-insensitive) "
+                                + "one is found; a founder can always rename from the City Core GUI afterward. If every name here is "
+                                + "already taken, falls back to \"<Party> City\" with a numeric suffix.")
+                .defineList("cityDefaultNames", List.of(
+                        "Ashford", "Brightwater", "Cinderfall", "Dawnspire", "Eastmarch", "Frosthaven", "Greywatch",
+                        "Havenport", "Ironhold", "Kingsreach", "Lonebridge", "Millbrook", "Northgate", "Oakenvale",
+                        "Pinehollow", "Ravenscar", "Silverford", "Thornwood", "Umberfall", "Vesterholm", "Westmoor",
+                        "Yorindale", "Zenithspire"), o -> o instanceof String);
         BUILDER.pop();
 
         BUILDER.push("tiers");
         TIERS = BUILDER.comment(
                         "The city tier ladder, one entry per tier, in order. Each entry is \"radius/cost/minCheckpoints/maxCheckpoints\":",
-                        "radius is how far checkpoints can be placed from the core; cost is the banked payment needed to reach it;",
-                        "minCheckpoints/maxCheckpoints bound how many checkpoints the city may have at that tier.",
+                        "radius is how many checkpoint-chunk grid cells out from the core a checkpoint may be placed (see "
+                                + "CheckpointChunkGrid — each cell is a plus-shaped 5-chunk claim, spaced 3 chunks apart on a "
+                                + "checkerboard grid; checkpoints may only sit on a cell, never the unclaimed gap chunks between "
+                                + "cells); cost is the banked payment needed to reach it; minCheckpoints/maxCheckpoints bound how "
+                                + "many checkpoints the city may have at that tier.",
                         "A tier's minCheckpoints must equal the previous tier's maxCheckpoints, so a city must fill its current "
                                 + "tier before it can upgrade; this is checked at startup.")
                 .defineList("tiers", List.of("5/0/1/5", "8/128/5/8", "13/512/8/13", "21/2048/13/21"), o -> o instanceof String);
@@ -239,6 +253,8 @@ public final class NationWarsConfig
         CHECKPOINT_PLACE_RANK = BUILDER.comment("Minimum party rank required to place a checkpoint.").define("checkpointPlaceRank", "MEMBER");
         CITY_UPGRADE_RANK = BUILDER.comment("Minimum party rank required to confirm a tier upgrade in the City GUI.")
                 .define("cityUpgradeRank", "MODERATOR");
+        CITY_RENAME_RANK = BUILDER.comment("Minimum party rank required to rename a city from the City Core GUI.")
+                .define("cityRenameRank", "MODERATOR");
         ALLIES_CAN_PLACE_CHECKPOINTS = BUILDER.comment("If true, members of an allied nation may also place checkpoints for a city, not just its own citizens.")
                 .define("alliesCanPlaceCheckpoints", false);
         ALLOW_UPGRADE_DURING_WAR = BUILDER.comment(
@@ -483,7 +499,7 @@ public final class NationWarsConfig
     {
         final List<TierDefinition> parsedTiers = TierListParser.parse(TIERS.get());
         TierValidation.validateLadder(parsedTiers);
-        TierValidation.validateSpacingFeasibility(parsedTiers, MIN_CHECKPOINT_SPACING.get());
+        TierValidation.validateSpacingFeasibility(parsedTiers);
         final int clampedMinCoreDistance = TierValidation.clampMinCoreDistance(MIN_CORE_DISTANCE.get(), parsedTiers, LOGGER::warn);
 
         tiers = parsedTiers;

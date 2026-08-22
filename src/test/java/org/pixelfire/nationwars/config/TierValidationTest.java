@@ -52,34 +52,36 @@ class TierValidationTest
     @Test
     void defaultSpacingIsFeasible()
     {
-        assertDoesNotThrow(() -> TierValidation.validateSpacingFeasibility(DEFAULT_TIERS, 3.0));
+        assertDoesNotThrow(() -> TierValidation.validateSpacingFeasibility(DEFAULT_TIERS));
     }
 
     @Test
     void spacingRejectsTierThatCannotFitItsOwnMaximum()
     {
-        // radius 5, maxCheckpoints 5 tolerates spacing up to ~5.88; 6 is infeasible.
-        final List<TierDefinition> tiers = List.of(new TierDefinition(5, 0, 1, 5));
+        // radius 1 has exactly 4 cells available (N/S/E/W of the origin); 5 checkpoints can't fit.
+        final List<TierDefinition> tiers = List.of(new TierDefinition(1, 0, 1, 5));
 
         final ConfigValidationException ex = assertThrows(ConfigValidationException.class,
-                () -> TierValidation.validateSpacingFeasibility(tiers, 6.0));
+                () -> TierValidation.validateSpacingFeasibility(tiers));
         assertTrue(ex.getMessage().contains("tier 1"), "expected the offending tier to be named: " + ex.getMessage());
     }
 
     @Test
-    void spacingIgnoresTiersWithAtMostOneCheckpoint()
+    void spacingAllowsExactlyAsManyCheckpointsAsCellsAvailable()
     {
-        final List<TierDefinition> tiers = List.of(new TierDefinition(1, 0, 1, 1));
-        assertDoesNotThrow(() -> TierValidation.validateSpacingFeasibility(tiers, 1000.0));
+        // radius 1 has exactly 4 cells available (N/S/E/W of the origin).
+        final List<TierDefinition> tiers = List.of(new TierDefinition(1, 0, 1, 4));
+        assertDoesNotThrow(() -> TierValidation.validateSpacingFeasibility(tiers));
     }
 
     @Test
     void minCoreDistanceUnchangedWhenAlreadyAboveFloor()
     {
         final AtomicReference<String> warning = new AtomicReference<>();
-        final int result = TierValidation.clampMinCoreDistance(192, DEFAULT_TIERS, warning::set);
+        // maxTierRadius = 21 cells = 21*48 = 1008 blocks -> floor = 2*1008+8 = 2024
+        final int result = TierValidation.clampMinCoreDistance(2100, DEFAULT_TIERS, warning::set);
 
-        assertEquals(192, result);
+        assertEquals(2100, result);
         assertNull(warning.get());
     }
 
@@ -87,10 +89,10 @@ class TierValidationTest
     void minCoreDistanceClampedWhenBelowFloor()
     {
         final AtomicReference<String> warning = new AtomicReference<>();
-        // maxTierRadius = 21 -> floor = 2*21+8 = 50
+        // maxTierRadius = 21 cells = 21*48 = 1008 blocks -> floor = 2*1008+8 = 2024
         final int result = TierValidation.clampMinCoreDistance(40, DEFAULT_TIERS, warning::set);
 
-        assertEquals(51, result);
+        assertEquals(2025, result);
         assertTrue(warning.get() != null && warning.get().contains("minCoreDistance"));
     }
 }

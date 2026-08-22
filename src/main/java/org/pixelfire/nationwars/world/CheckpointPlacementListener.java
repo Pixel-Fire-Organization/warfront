@@ -187,6 +187,7 @@ public final class CheckpointPlacementListener
         if (leaderUuid != null)
         {
             OpacNations.claimChunks(server, level.dimension().location(), leaderUuid, claimedChunks);
+            claimEnclosedGapChunks(server, level, matchedCity, registry, leaderUuid, pos);
         }
 
         final CompoundTag after = CheckpointSnapshot.write(checkpoint);
@@ -197,6 +198,44 @@ public final class CheckpointPlacementListener
                 List.of(checkpointId, matchedCity.cityId()), new CompoundTag(), after, true));
 
         player.sendSystemMessage(Component.literal("Checkpoint placed.").withStyle(ChatFormatting.GREEN));
+    }
+
+    /**
+     * A 2x2 group of checkpoint-chunk cells fully occupied by checkpoints encloses the gap chunks
+     * between them; once the last of the four is placed, those gap chunks are absorbed into the city
+     * automatically instead of staying permanently unclaimed no-mans-land inside the city's own bounds.
+     */
+    private void claimEnclosedGapChunks(final MinecraftServer server, final ServerLevel level, final City city,
+            final NationRegistry registry, final UUID leaderUuid, final BlockPos newCheckpointPos)
+    {
+        final ChunkPos coreChunk = new ChunkPos(city.corePos());
+        final Optional<CheckpointChunkGrid.Cell> newCell = CheckpointChunkGrid.resolveCell(coreChunk, new ChunkPos(newCheckpointPos));
+        if (newCell.isEmpty())
+        {
+            return;
+        }
+
+        final Set<CheckpointChunkGrid.Cell> occupiedCells = new HashSet<>();
+        for (final Checkpoint checkpoint : registry.checkpoints().values())
+        {
+            if (checkpoint.cityId().equals(city.cityId()))
+            {
+                CheckpointChunkGrid.resolveCell(coreChunk, new ChunkPos(checkpoint.pos())).ifPresent(occupiedCells::add);
+            }
+        }
+
+        for (final CheckpointChunkGrid.Cell base : CheckpointChunkGrid.adjacentGapGroupBases(newCell.get()))
+        {
+            final boolean fullyEnclosed = occupiedCells.contains(base)
+                    && occupiedCells.contains(new CheckpointChunkGrid.Cell(base.i() + 1, base.j()))
+                    && occupiedCells.contains(new CheckpointChunkGrid.Cell(base.i(), base.j() + 1))
+                    && occupiedCells.contains(new CheckpointChunkGrid.Cell(base.i() + 1, base.j() + 1));
+            if (fullyEnclosed)
+            {
+                final Set<ChunkPos> gapChunks = CheckpointChunkGrid.gapChunksBetween(coreChunk, base.i(), base.j());
+                OpacNations.claimChunks(server, level.dimension().location(), leaderUuid, gapChunks);
+            }
+        }
     }
 
     private static City findMatchingCity(final NationRegistry registry, final ServerLevel level, final BlockPos pos)
@@ -231,10 +270,13 @@ public final class CheckpointPlacementListener
         {
             return false;
         }
-        final double dx = city.corePos().getX() - pos.getX();
-        final double dz = city.corePos().getZ() - pos.getZ();
-        final double radius = NationWarsConfig.tiers.get(city.tier()).radius();
-        return dx * dx + dz * dz <= radius * radius;
+        final Optional<CheckpointChunkGrid.Cell> cell = CheckpointChunkGrid.resolveCell(new ChunkPos(city.corePos()), new ChunkPos(pos));
+        if (cell.isEmpty())
+        {
+            return false;
+        }
+        final int radius = NationWarsConfig.tiers.get(city.tier()).radius();
+        return cell.get().distanceFromOrigin() <= radius;
     }
 
     private static PartyMemberRank parseRank(final String name)

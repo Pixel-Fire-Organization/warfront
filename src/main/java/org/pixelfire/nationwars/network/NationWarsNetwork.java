@@ -69,7 +69,8 @@ public final class NationWarsNetwork
         registerC2S(RequestCityInfoPacket.class, RequestCityInfoPacket::decode, id++, ServerPacketHandlers::handleRequestCityInfo);
         registerC2S(DeclareWarPacket.class, DeclareWarPacket::decode, id++, ServerPacketHandlers::handleDeclareWar);
         registerC2S(ProposeSettlementPacket.class, ProposeSettlementPacket::decode, id++, ServerPacketHandlers::handleProposeSettlement);
-        registerC2S(SettlementResponsePacket.class, SettlementResponsePacket::decode, id, ServerPacketHandlers::handleSettlementResponse);
+        registerC2S(SettlementResponsePacket.class, SettlementResponsePacket::decode, id++, ServerPacketHandlers::handleSettlementResponse);
+        registerC2S(RenameCityPacket.class, RenameCityPacket::decode, id, ServerPacketHandlers::handleRenameCity);
     }
 
     private static <T extends NationWarsPacket> void registerS2C(final Class<T> type, final Function<FriendlyByteBuf, T> decoder,

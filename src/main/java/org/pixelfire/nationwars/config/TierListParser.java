@@ -4,7 +4,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Parses the {@code tiers} config list. Each entry is {@code "radius/cost/minCheckpoints/maxCheckpoints"}.
+ * Parses the {@code tiers} config list. Each entry is {@code "radius/cost/minCheckpoints/maxCheckpoints"},
+ * where {@code radius} counts checkpoint-chunk grid cells (see {@code CheckpointChunkGrid}), not blocks
+ * or raw chunks — it's compared directly against a checkpoint's cell distance from the city's own cell.
  */
 public final class TierListParser
 {
@@ -32,11 +34,11 @@ public final class TierListParser
         }
         try
         {
-            final int radius = Integer.parseInt(parts[0].trim());
+            final int radiusCells = Integer.parseInt(parts[0].trim());
             final long cost = Long.parseLong(parts[1].trim());
             final int min = Integer.parseInt(parts[2].trim());
             final int max = Integer.parseInt(parts[3].trim());
-            return new TierDefinition(radius, cost, min, max);
+            return new TierDefinition(radiusCells, cost, min, max);
         }
         catch (final NumberFormatException e)
         {

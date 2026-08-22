@@ -31,6 +31,7 @@ import org.pixelfire.nationwars.state.NationRegistry;
 import org.pixelfire.nationwars.state.UpgradeContext;
 import org.pixelfire.nationwars.state.UpgradeFailureReason;
 import org.pixelfire.nationwars.state.UpgradePreconditions;
+import org.pixelfire.nationwars.world.CheckpointChunkGrid;
 import org.pixelfire.nationwars.world.OpacNations;
 import org.pixelfire.nationwars.world.OpacNations.NationSnapshot;
 import org.pixelfire.nationwars.world.block.NationWarsMenus;
@@ -118,6 +119,11 @@ public final class CityCoreMenu extends AbstractContainerMenu
     public int cityStateOrdinal()
     {
         return data.get(DATA_CITY_STATE);
+    }
+
+    public BlockPos corePos()
+    {
+        return corePos;
     }
 
     private City currentCity()
@@ -288,9 +294,11 @@ public final class CityCoreMenu extends AbstractContainerMenu
         player.sendSystemMessage(Component.literal("City upgraded to tier " + (city.tier() + 2) + "."));
     }
 
-    private boolean isExpandedRadiusTooClose(final NationRegistry registry, final City city, final ServerLevel level, final int nextRadius)
+    private boolean isExpandedRadiusTooClose(final NationRegistry registry, final City city, final ServerLevel level, final int nextRadiusCells)
     {
-        final double threshold = nextRadius + NationWarsConfig.MIN_CHECKPOINT_SPACING.get();
+        // nextRadiusCells counts checkpoint-chunk grid cells (see CheckpointChunkGrid), but this check
+        // compares against another city's raw block position, so it needs converting to blocks.
+        final double threshold = (double) nextRadiusCells * CheckpointChunkGrid.BLOCKS_PER_CELL + NationWarsConfig.MIN_CHECKPOINT_SPACING.get();
         for (final Checkpoint checkpoint : registry.checkpoints().values())
         {
             if (checkpoint.cityId().equals(city.cityId()) || !checkpoint.dimension().equals(level.dimension()))
