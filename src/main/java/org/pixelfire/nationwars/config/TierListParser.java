@@ -4,10 +4,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Parses the {@code tiers} config list. Each entry is {@code "radius/cost/minCheckpoints/maxCheckpoints"}.
+ * Parses the {@code tiers} config list. Each entry is {@code "radius/cost/minCheckpoints/maxCheckpoints"},
+ * where {@code radius} is authored in chunks (matching how a city's own claim footprint is sized) but
+ * converted to blocks here, since every consumer of {@link TierDefinition#radius()} compares it against
+ * block distances.
  */
 public final class TierListParser
 {
+    private static final int BLOCKS_PER_CHUNK = 16;
+
     private TierListParser()
     {
     }
@@ -32,11 +37,11 @@ public final class TierListParser
         }
         try
         {
-            final int radius = Integer.parseInt(parts[0].trim());
+            final int radiusChunks = Integer.parseInt(parts[0].trim());
             final long cost = Long.parseLong(parts[1].trim());
             final int min = Integer.parseInt(parts[2].trim());
             final int max = Integer.parseInt(parts[3].trim());
-            return new TierDefinition(radius, cost, min, max);
+            return new TierDefinition(radiusChunks * BLOCKS_PER_CHUNK, cost, min, max);
         }
         catch (final NumberFormatException e)
         {
