@@ -1,5 +1,7 @@
 package org.pixelfire.nationwars.config;
 
+import org.pixelfire.nationwars.world.CheckpointChunkGrid;
+
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -46,27 +48,40 @@ public final class TierValidation
     }
 
     /**
-     * Checks that a tier's own maximum checkpoint count can physically fit on the boundary circle at
-     * the configured radius and minimum spacing ({@code spacing <= 2r*sin(pi/n)}). Refuses to start
-     * if not — otherwise a city could never reach its own tier maximum.
+     * Checks that a tier's own maximum checkpoint count can physically fit within its radius: a
+     * checkpoint may only occupy one checkpoint-chunk grid cell, so the number of cells within that
+     * radius (Euclidean, in cell units, excluding the city's own origin cell) is a hard ceiling.
+     * Refuses to start if not — otherwise a city could never reach its own tier maximum.
      */
-    public static void validateSpacingFeasibility(final List<TierDefinition> tiers, final double minCheckpointSpacing)
+    public static void validateSpacingFeasibility(final List<TierDefinition> tiers)
     {
         for (int i = 0; i < tiers.size(); i++)
         {
             final TierDefinition tier = tiers.get(i);
-            if (tier.maxCheckpoints() <= 1)
-            {
-                continue;
-            }
-            final double maxSpacing = 2 * tier.radius() * Math.sin(Math.PI / tier.maxCheckpoints());
-            if (minCheckpointSpacing > maxSpacing)
+            final int availableCells = cellsWithinRadius(tier.radius());
+            if (tier.maxCheckpoints() > availableCells)
             {
                 throw new ConfigValidationException("tier " + (i + 1) + " cannot place its own maxCheckpoints (" + tier.maxCheckpoints()
-                        + ") at radius " + tier.radius() + " with minCheckpointSpacing " + minCheckpointSpacing
-                        + "; spacing must be <= " + maxSpacing + " (2 * radius * sin(pi / maxCheckpoints))");
+                        + ") within its radius of " + tier.radius() + " checkpoint-chunk cells; only " + availableCells
+                        + " cells are available at that radius");
             }
         }
+    }
+
+    private static int cellsWithinRadius(final int radius)
+    {
+        int count = 0;
+        for (int i = -radius; i <= radius; i++)
+        {
+            for (int j = -radius; j <= radius; j++)
+            {
+                if ((i != 0 || j != 0) && i * i + j * j <= radius * radius)
+                {
+                    count++;
+                }
+            }
+        }
+        return count;
     }
 
     /**
@@ -79,12 +94,13 @@ public final class TierValidation
      */
     public static int clampMinCoreDistance(final int minCoreDistance, final List<TierDefinition> tiers, final Consumer<String> warn)
     {
-        final int maxTierRadius = tiers.stream().mapToInt(TierDefinition::radius).max().orElse(0);
-        final int floor = 2 * maxTierRadius + 8;
+        final int maxTierRadiusCells = tiers.stream().mapToInt(TierDefinition::radius).max().orElse(0);
+        final int maxTierRadiusBlocks = maxTierRadiusCells * CheckpointChunkGrid.BLOCKS_PER_CELL;
+        final int floor = 2 * maxTierRadiusBlocks + 8;
         if (minCoreDistance <= floor)
         {
             final int clamped = floor + 1;
-            warn.accept("minCoreDistance (" + minCoreDistance + ") must exceed 2 * maxTierRadius + 8 (" + floor
+            warn.accept("minCoreDistance (" + minCoreDistance + ") must exceed 2 * maxTierRadius (in blocks) + 8 (" + floor
                     + "); clamped to " + clamped);
             return clamped;
         }

@@ -173,7 +173,7 @@ public final class NationWarsConfig
         MIN_CORE_DISTANCE = BUILDER.comment(
                         "Minimum horizontal distance, in blocks, required between two City Cores. Too small a value relative to "
                                 + "the largest tier's radius is corrected automatically at startup (see the warning if that happens).")
-                .defineInRange("minCoreDistance", 700, 1, Integer.MAX_VALUE);
+                .defineInRange("minCoreDistance", 2100, 1, Integer.MAX_VALUE);
         MAX_CITIES_PER_NATION = BUILDER.comment("Hard cap on how many cities one nation may found in total.")
                 .defineInRange("maxCitiesPerNation", 5, 1, Integer.MAX_VALUE);
         MAX_CITIES_PER_MEMBER = BUILDER.comment(
@@ -212,9 +212,11 @@ public final class NationWarsConfig
         BUILDER.push("tiers");
         TIERS = BUILDER.comment(
                         "The city tier ladder, one entry per tier, in order. Each entry is \"radius/cost/minCheckpoints/maxCheckpoints\":",
-                        "radius is how far checkpoints can be placed from the core, in chunks (converted to blocks internally, so it "
-                                + "stays sized consistently with a city's own chunk claim footprint); cost is the banked payment needed "
-                                + "to reach it; minCheckpoints/maxCheckpoints bound how many checkpoints the city may have at that tier.",
+                        "radius is how many checkpoint-chunk grid cells out from the core a checkpoint may be placed (see "
+                                + "CheckpointChunkGrid — each cell is a plus-shaped 5-chunk claim, spaced 3 chunks apart on a "
+                                + "checkerboard grid; checkpoints may only sit on a cell, never the unclaimed gap chunks between "
+                                + "cells); cost is the banked payment needed to reach it; minCheckpoints/maxCheckpoints bound how "
+                                + "many checkpoints the city may have at that tier.",
                         "A tier's minCheckpoints must equal the previous tier's maxCheckpoints, so a city must fill its current "
                                 + "tier before it can upgrade; this is checked at startup.")
                 .defineList("tiers", List.of("5/0/1/5", "8/128/5/8", "13/512/8/13", "21/2048/13/21"), o -> o instanceof String);
@@ -484,7 +486,7 @@ public final class NationWarsConfig
     {
         final List<TierDefinition> parsedTiers = TierListParser.parse(TIERS.get());
         TierValidation.validateLadder(parsedTiers);
-        TierValidation.validateSpacingFeasibility(parsedTiers, MIN_CHECKPOINT_SPACING.get());
+        TierValidation.validateSpacingFeasibility(parsedTiers);
         final int clampedMinCoreDistance = TierValidation.clampMinCoreDistance(MIN_CORE_DISTANCE.get(), parsedTiers, LOGGER::warn);
 
         tiers = parsedTiers;
