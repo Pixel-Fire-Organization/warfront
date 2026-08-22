@@ -1,4 +1,5 @@
 {
   "block.nationwars.city_core": "City Core",
-  "block.nationwars.checkpoint": "Checkpoint"
+  "block.nationwars.checkpoint": "Checkpoint",
+  "itemGroup.nationwars": "Nations & Checkpoints"
 }

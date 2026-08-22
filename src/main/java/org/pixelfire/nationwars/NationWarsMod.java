@@ -53,6 +53,7 @@ import org.pixelfire.nationwars.world.ColumnRegistry;
 import org.pixelfire.nationwars.world.OpacIntegration;
 import org.pixelfire.nationwars.world.block.NationWarsBlockEntities;
 import org.pixelfire.nationwars.world.block.NationWarsBlocks;
+import org.pixelfire.nationwars.world.block.NationWarsCreativeTabs;
 import org.pixelfire.nationwars.world.block.NationWarsMenus;
 import org.pixelfire.nationwars.network.NationWarsNetwork;
 import org.pixelfire.nationwars.settlement.NationWarsPeaceClauses;
@@ -142,6 +143,7 @@ public class NationWarsMod
         NationWarsBlocks.bootstrap();
         NationWarsBlockEntities.bootstrap();
         NationWarsMenus.bootstrap();
+        NationWarsCreativeTabs.bootstrap();
         NationWarsPeaceClauses.bootstrap();
         CheckpointReverters.bootstrap();
         SettlementReverter.bootstrap();
@@ -151,6 +153,7 @@ public class NationWarsMod
         ITEMS.register(modEventBus);
         BLOCK_ENTITY_TYPES.register(modEventBus);
         MENU_TYPES.register(modEventBus);
+        NationWarsCreativeTabs.CREATIVE_MODE_TABS.register(modEventBus);
         PEACE_CLAUSES.register(modEventBus);
 
         MinecraftForge.EVENT_BUS.register(this);
