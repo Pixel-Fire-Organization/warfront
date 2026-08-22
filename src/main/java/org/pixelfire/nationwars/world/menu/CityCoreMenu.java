@@ -65,30 +65,24 @@ public final class CityCoreMenu extends AbstractContainerMenu
             return valueOf(stack).isPresent();
         }
     };
+    // Backs the vanilla data-slot sync: the server refreshes these from the live city in
+    // broadcastChanges() and AbstractContainerMenu diffs+sends changes to the client, which writes
+    // incoming values back via set(). currentCity() itself is unavailable on the client (its
+    // NationRegistry is only populated by the server-side ServerStartingEvent), so get() must never
+    // fall back to recomputing from it.
+    private final int[] syncedData = new int[DATA_COUNT];
     private final ContainerData data = new ContainerData()
     {
         @Override
         public int get(final int index)
         {
-            final City city = currentCity();
-            if (city == null)
-            {
-                return 0;
-            }
-            return switch (index)
-            {
-                case DATA_TIER -> city.tier();
-                case DATA_BANKED_PAYMENT -> (int) Math.min(Integer.MAX_VALUE, city.bankedPayment());
-                case DATA_CHECKPOINT_COUNT -> city.checkpointIds().size();
-                case DATA_CITY_STATE -> city.state().ordinal();
-                case DATA_OCCUPATION_COUNTDOWN -> 0;
-                default -> 0;
-            };
+            return syncedData[index];
         }
 
         @Override
         public void set(final int index, final int value)
         {
+            syncedData[index] = value;
         }
 
         @Override
@@ -128,7 +122,12 @@ public final class CityCoreMenu extends AbstractContainerMenu
 
     private City currentCity()
     {
-        return NationWarsMod.get().getNationRegistry().cities().values().stream()
+        final NationRegistry registry = NationWarsMod.get().getNationRegistry();
+        if (registry == null)
+        {
+            return null;
+        }
+        return registry.cities().values().stream()
                 .filter(city -> city.corePos().equals(corePos))
                 .findFirst().orElse(null);
     }
@@ -165,15 +164,25 @@ public final class CityCoreMenu extends AbstractContainerMenu
     @Override
     public void broadcastChanges()
     {
-        final ItemStack inserted = paymentSlot.getStackInSlot(0);
-        if (!inserted.isEmpty())
+        final City city = currentCity();
+        if (city != null)
         {
-            final OptionalLong value = valueOf(inserted);
-            if (value.isPresent())
+            syncedData[DATA_TIER] = city.tier();
+            syncedData[DATA_BANKED_PAYMENT] = (int) Math.min(Integer.MAX_VALUE, city.bankedPayment());
+            syncedData[DATA_CHECKPOINT_COUNT] = city.checkpointIds().size();
+            syncedData[DATA_CITY_STATE] = city.state().ordinal();
+            syncedData[DATA_OCCUPATION_COUNTDOWN] = 0;
+
+            final ItemStack inserted = paymentSlot.getStackInSlot(0);
+            if (!inserted.isEmpty())
             {
-                final long total = value.getAsLong() * inserted.getCount();
-                applyPayment(total);
-                paymentSlot.setStackInSlot(0, ItemStack.EMPTY);
+                final OptionalLong value = valueOf(inserted);
+                if (value.isPresent())
+                {
+                    final long total = value.getAsLong() * inserted.getCount();
+                    applyPayment(total);
+                    paymentSlot.setStackInSlot(0, ItemStack.EMPTY);
+                }
             }
         }
         super.broadcastChanges();
